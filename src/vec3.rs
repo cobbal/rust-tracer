@@ -1,7 +1,8 @@
+
 use std::ops::*;
 use std::fmt;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Vec3 {
     x : f32,
     y : f32,
@@ -19,7 +20,15 @@ pub fn vec3(x : f32, y : f32, z : f32) -> Vec3 {
     return Vec3{ x: x, y: y, z: z};
 }
 
-pub fn dot<'a>(a : &'a Vec3, b : &'a Vec3) -> f32 {
+pub fn uvec3(a : usize, b : usize, c : usize) -> Vec3 {
+    vec3(a as f32, b as f32, c as f32)
+}
+
+pub fn ivec3(a : i32, b : i32, c : i32) -> Vec3 {
+    vec3(a as f32, b as f32, c as f32)
+}
+
+pub fn dot(a : Vec3, b : Vec3) -> f32 {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
@@ -31,7 +40,7 @@ pub fn cross<'a>(a : &'a Vec3, b : &'a Vec3) -> Vec3 {
 
 impl Vec3 {
     pub fn len<'a>(&'a self) -> f32 {
-        return dot(self, self).sqrt();
+        return dot(*self, *self).sqrt();
     }
 
     pub fn unit(&self) -> Vec3 {
@@ -48,7 +57,16 @@ impl Vec3 {
     pub fn fmap<F : Fn(f32) -> f32>(&self, f : F) -> Vec3 {
         return vec3(f(self.x), f(self.y), f(self.z));
     }
+
+    pub fn fmap2<F : Fn(f32, f32) -> f32>(f : F, a : &Vec3, b : &Vec3) -> Vec3 {
+        return vec3(f(a.x, b.x),
+                    f(a.y, b.y),
+                    f(a.z, b.z));
+    }
 }
+
+pub const ZERO3 : Vec3 = Vec3{x: 0.0, y: 0.0, z: 0.0};
+pub const ONE3 : Vec3 = Vec3{x: 1.0, y: 1.0, z: 1.0};
 
 macro_rules! elemOp {
     ($T:ident, $p:ident, $t0:ty, $t1:ty) => (impl<'a, 'b> $T<$t1> for $t0 {
@@ -171,26 +189,54 @@ impl<'a> Neg for &'a Vec3 {
     }
 }
 
-pub enum Vec3Index { X, Y, Z, R, G, B }
+pub enum Vec3Index {
+    X, Y, Z,
+}
+
+pub const R : Vec3Index = Vec3Index::X;
+pub const G : Vec3Index = Vec3Index::Y;
+pub const B : Vec3Index = Vec3Index::Z;
 
 impl Index<Vec3Index> for Vec3 {
     type Output = f32;
     fn index<'a>(&'a self, i : Vec3Index) -> &'a f32 {
         return match i {
-            Vec3Index::X => &self.x, Vec3Index::R => &self.x,
-            Vec3Index::Y => &self.y, Vec3Index::G => &self.y,
-            Vec3Index::Z => &self.z, Vec3Index::B => &self.z,
+            Vec3Index::X => &self.x,
+            Vec3Index::Y => &self.y,
+            Vec3Index::Z => &self.z,
         }
     }
 }
 
-
 impl IndexMut<Vec3Index> for Vec3 {
     fn index_mut<'a>(&'a mut self, i : Vec3Index) -> &'a mut f32 {
         return match i {
-            Vec3Index::X => &mut self.x, Vec3Index::R => &mut self.x,
-            Vec3Index::Y => &mut self.y, Vec3Index::G => &mut self.y,
-            Vec3Index::Z => &mut self.z, Vec3Index::B => &mut self.z,
+            Vec3Index::X => &mut self.x,
+            Vec3Index::Y => &mut self.y,
+            Vec3Index::Z => &mut self.z,
         }
+    }
+}
+
+impl Index<usize> for Vec3 {
+    type Output = f32;
+    fn index<'a>(&'a self, i : usize) -> &'a f32 {
+        return match i {
+            0 => &self.x,
+            1 => &self.y,
+            2 => &self.z,
+            _ => panic!(),
+       }
+    }
+}
+
+impl IndexMut<usize> for Vec3 {
+    fn index_mut<'a>(&'a mut self, i : usize) -> &'a mut f32 {
+        return match i {
+            0 => &mut self.x,
+            1 => &mut self.y,
+            2 => &mut self.z,
+            _ => panic!(),
+       }
     }
 }
