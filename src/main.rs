@@ -1180,7 +1180,7 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
     let marble = Rc::new(Lambertian(
         PerlinTexture {
             noise: Rc::new(PerlinNoise::new(rng, 256)),
-            scale: 4.0,
+            scale: 0.1,
         }));
     list.push(sphere(80.0, ivec3(220, 280, 300), marble));
 
