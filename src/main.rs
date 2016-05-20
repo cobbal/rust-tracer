@@ -46,19 +46,19 @@ fn rand_in_disk(rng : &mut Rng) -> Vec3 {
     }
 }
 
-fn write_buffer(nx : u32, ny : u32, ns : u32, flimg : &mut [&mut [Vec3]]) {
+fn write_buffer(nx : u32, ny : u32, ns : u32, flimg : &mut [&mut [[f64; 3]]]) {
     let mut img = image::DynamicImage::new_rgb8(nx, ny);
 
     for y in 0..ny {
         for x in 0..nx {
             let mut col = flimg[y as usize][x as usize].clone();
-            col /= ns as f32;
-            col.fmap_mut(&|x : f32| x.max(0.0).min(1.0));
-            col.fmap_mut(&|x : f32| x.sqrt());
+            col[0] = (col[0] / ns as f64).max(0.0).min(1.0).sqrt();
+            col[1] = (col[1] / ns as f64).max(0.0).min(1.0).sqrt();
+            col[2] = (col[2] / ns as f64).max(0.0).min(1.0).sqrt();
 
-            let ir = (255.99 * col[R]) as u8;
-            let ig = (255.99 * col[G]) as u8;
-            let ib = (255.99 * col[B]) as u8;
+            let ir = (255.99 * col[0]) as u8;
+            let ig = (255.99 * col[1]) as u8;
+            let ib = (255.99 * col[2]) as u8;
             img.as_mut_rgb8().unwrap()[(x, y)] = image::Rgb([ir, ig, ib])
         }
     }
@@ -173,10 +173,10 @@ fn main() {
     };
 
     // http://stackoverflow.com/a/36376568/73681
-    let mut flimg_raw = vec![vec3(0.0, 0.0, 0.0); (nx * ny) as usize];
+    let mut flimg_raw = vec![[0.0; 3]; (nx * ny) as usize];
     let mut grid_base : Vec<_> =
         flimg_raw.as_mut_slice().chunks_mut(nx as usize).collect();
-    let mut flimg : &mut [&mut [Vec3]] = grid_base.as_mut_slice();
+    let mut flimg : &mut [&mut [[f64; 3]]] = grid_base.as_mut_slice();
 
     for s in 0..ns {
         if log_tick_maybe(s as i32) {
@@ -191,7 +191,10 @@ fn main() {
 
                 let r = cam.get_ray(&mut rng, u, v);
 
-                flimg[y as usize][x as usize] += color(&mut rng, r, &*world);
+                let col = color(&mut rng, r, &*world);
+                flimg[y as usize][x as usize] = [col[R] as f64,
+                                                 col[G] as f64,
+                                                 col[B] as f64];
             }
         }
     }
@@ -742,7 +745,9 @@ struct PerlinTexture {
 impl Texture for PerlinTexture {
     fn tex_lookup(&self, uv : (f32, f32), p : &Vec3) -> Vec3 {
         // return vec3(1.0, 1.0, 1.0) * 0.5 * (1.0 + self.noise.turb(self.scale * p, 7));
-        ONE3 * 0.5 * (1.0 + (self.scale * p[Z] + 10.0 * self.noise.turb(*p, 7)).sin())
+        ONE3 * 0.5 * (1.0 + (self.scale * p[X] + 5.0 * self.noise.turb(*p, 7)).sin())
+        //return vec3(1,1,1)*0.5*(1 + sin(scale*p.x() + 5*noise.turb(scale*p))) ;
+
     }
 }
 
