@@ -146,12 +146,15 @@ fn main() {
     // let world = cornell_box(&mut rng);
     let world = the_next_week(&mut rng);
 
-    let lookfrom = ivec3(278, 278, -800);
     let lookfrom = ivec3(478, 278, -600);
     let lookat = ivec3(278, 278, 0);
     let dist_to_focus = 10.0;
     let aperture = 0.0;
     let vfov = 40.0;
+
+    // stare at blue marble
+    // let lookat = ivec3(360, 150, 145);
+    // let vfov = 15.0;
 
     let cam = camera(lookfrom, lookat, vec3(0.0, 1.0, 0.0),
                      vfov, nx as f32 / ny as f32,
@@ -232,6 +235,18 @@ fn color(rng : &mut Rng, r0 : Ray, world : &Hitable) -> Vec3 {
                     Some((scattered, local_att)) => {
                         r = scattered;
                         attenuation *= local_att;
+                        let thresh = 0.25;
+                        if
+                            attenuation[R] < thresh &&
+                            attenuation[G] < thresh &&
+                            attenuation[B] < thresh
+                        {
+                            if rng.gen::<f32>() < thresh {
+                                attenuation = attenuation / thresh;
+                            } else {
+                                break;
+                            }
+                        }
                         continue;
                     },
                     None => {
@@ -241,10 +256,6 @@ fn color(rng : &mut Rng, r0 : Ray, world : &Hitable) -> Vec3 {
             },
             None => {
                 break;
-                // let unit_direction = r.direction.unit();
-                // let t = 0.5 * unit_direction[Y] + 1.0;
-                // accumulator *= (1.0 - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
-                // break;
             }
         }
         panic!()
@@ -745,7 +756,7 @@ struct PerlinTexture {
 impl Texture for PerlinTexture {
     fn tex_lookup(&self, uv : (f32, f32), p : &Vec3) -> Vec3 {
         // return vec3(1.0, 1.0, 1.0) * 0.5 * (1.0 + self.noise.turb(self.scale * p, 7));
-        ONE3 * 0.5 * (1.0 + (self.scale * p[X] + 5.0 * self.noise.turb(*p, 7)).sin())
+        ONE3 * 0.5 * (1.0 + (self.scale * p[X] + 5.0 * self.noise.turb(self.scale * p, 7)).sin())
         //return vec3(1,1,1)*0.5*(1 + sin(scale*p.x() + 5*noise.turb(scale*p))) ;
 
     }
@@ -1102,7 +1113,6 @@ impl Hitable for ConstantMedium {
 }
 
 struct Isotropic<T : Texture>(T);
-
 impl<T : Texture> Material for Isotropic<T> {
     fn scatter(
         &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
@@ -1112,6 +1122,36 @@ impl<T : Texture> Material for Isotropic<T> {
         r.origin = hit.p;
         r.direction = rand_in_ball(rng).unit();
         Some((r, albedo.tex_lookup(hit.uv, &hit.p)))
+    }
+}
+
+struct Tinted<T : Texture>(T);
+impl<T : Texture> Material for Tinted<T> {
+    fn scatter(
+        &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
+    ) -> Option<(Ray, Vec3)> {
+        let Tinted(ref tint) = *self;
+        let mut r = (*r_in).clone();
+        r.origin = hit.p;
+        Some((r, tint.tex_lookup(hit.uv, &hit.p)))
+    }
+}
+
+struct MixtureMaterial<M1 : Material, M2 : Material> {
+    p : f32,
+    m1 : M1,
+    m2 : M2,
+}
+impl<M1 : Material, M2 : Material> Material for MixtureMaterial<M1, M2> {
+    fn scatter(
+        &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
+    ) -> Option<(Ray, Vec3)> {
+        let m : &Material = if rng.gen::<f32>() < self.p {
+            &self.m1
+        } else {
+            &self.m2
+        };
+        m.scatter(rng, r_in, hit)
     }
 }
 
@@ -1126,32 +1166,59 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
         Rc::new(Lambertian(ConstantTex(vec3(0.48, 0.83, 0.53))));
     let red : Rc<Material> =
         Rc::new(Lambertian(ConstantTex(ivec3(1, 0, 0))));
-    let light : Rc<Material> =
-        Rc::new(DiffuseLight(ConstantTex(7.0 * ONE3)));
 
     let nb = 20;
-    for i in 0..nb {
-        for j in 0..nb {
-            let w = 100.0;
-            let x0 = -1000.0 + w * i as f32;
-            let z0 = -1000.0 + w * j as f32;
+    let gi = -5..5;
+    let gj = -2..10;
+    let w = 100.0;
+    for i in gi.clone() {
+        for j in gj.clone() {
+            let x0 = w * i as f32;
+            let z0 = w * j as f32;
             let y0 = 0.0;
             let x1 = x0 + w;
             let mut y1 = 100.0 * (rng.gen::<f32>() + 0.01);
             let z1 = z0 + w;
 
-            if i == 12 && j == 10 {
-                y1 = 100.0;
+            // make sure we see the caustics
+
+            if
+                i == 2 && j == 0 ||
+                i == 3 && j == 1
+            {
+                y1 = 80.0;
             }
 
             boxlist.push(cube(vec3(x0, y0, z0), vec3(x1, y1, z1), &ground));
         }
     }
 
-    list.push(into_bvh(rng, boxlist, (0.0, 1.0)));
-    let bb = list[0].bounding_box((0.0, 1.0));
-    println!("{}, {}", bb.min, bb.max);
-    list.push(XZRect::new((123.0, 423.0), (147.0, 412.0), 554.0, &light, false));
+    let complicated_geom = true;
+
+    if complicated_geom {
+        //complicated ground
+        list.push(into_bvh(rng, boxlist, (0.0, 1.0)));
+    } else {
+        // simple ground
+        list.push(XZRect::new((w * gi.start as f32, w * gi.end as f32),
+                              (w * gj.start as f32, w * gj.end as f32),
+                              80.0,
+                              &ground, false));
+    }
+    // list.push(XZRect::new((123.0, 423.0), (147.0, 412.0), 554.0, &light, false));
+    {
+        let center = ivec3(273, 554, 279);
+        let size = ivec3(150, 0, 132);
+        let adjust = 1.0;
+        let light : Rc<Material> =
+            Rc::new(DiffuseLight(
+                ConstantTex(7.0 * ONE3 / adjust / adjust)));
+        let min = center - size * adjust;
+        let max = center + size * adjust;
+
+        list.push(XZRect::new((min[X], max[X]), (min[Z], max[Z]), min[Y],
+                              &light, false));
+    }
     let center = ivec3(400, 400, 200);
     list.push(moving_sphere(50.0, center, center + ivec3(30, 0, 0), 0.0, 1.0,
                      Rc::new(Lambertian(ConstantTex(vec3(0.7, 0.3, 0.1))))));
@@ -1162,13 +1229,18 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
                                     albedo: vec3(0.8, 0.8, 0.9),
                                     fuzz: 10.0,
                                 })));
+
     let boundary = sphere(70.0, ivec3(360, 150, 145),
-                                     Rc::new(Dielectric(1.5)));
+                          Rc::new(Dielectric(1.3)));
     list.push(boundary.clone());
+    let medium_color = vec3(0.2, 0.4, 0.9);
+    let iso = Isotropic(ConstantTex(medium_color));
+    let tint = Tinted(ConstantTex(medium_color));
+    let mix = MixtureMaterial{p: 0.1, m1: iso, m2: tint};
     list.push(box ConstantMedium {
         boundary: boundary,
-        density: 0.2,
-        phase_function: box Isotropic(ConstantTex(vec3(0.2, 0.4, 0.9))),
+        density: 0.1,
+        phase_function: box mix,
     });
     let boundary = sphere(5000.0, ivec3(0, 0, 0),
                                      Rc::new(Dielectric(1.5)));
@@ -1189,14 +1261,18 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
         }));
     list.push(sphere(80.0, ivec3(220, 280, 300), marble));
 
-    let nspheres = 1000;
-    for i in 0..nspheres {
-        let center = 165.0 * vec3(rng.gen(), rng.gen(), rng.gen());
+    for i in 0..200 {
+        let rvec = vec3(rng.gen(), rng.gen(), rng.gen());
+        let rvec = (rand_in_ball(rng).unit() + ivec3(1, 1, 1)) / 2.0;
+        let center = rvec * 165.0;
         boxlist2.push(sphere(10.0, center, white.clone()));
     }
-    list.push(translate(ivec3(-100, 270, 395),
-                        rotate(ivec3(0, 1, 0), 15.0,
-                               into_bvh(rng, boxlist2, (0.0, 1.0)))));
+
+    if complicated_geom {
+        list.push(translate(ivec3(-100, 270, 395),
+                        // rotate(ivec3(0, 1, 0), 15.0,
+                        into_bvh(rng, boxlist2, (0.0, 1.0))));
+    }
 
     return into_bvh(rng, list, (0.0, 1.0));
 }
