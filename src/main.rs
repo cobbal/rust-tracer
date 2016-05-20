@@ -192,9 +192,9 @@ fn main() {
                 let r = cam.get_ray(&mut rng, u, v);
 
                 let col = color(&mut rng, r, &*world);
-                flimg[y as usize][x as usize] = [col[R] as f64,
-                                                 col[G] as f64,
-                                                 col[B] as f64];
+                flimg[y as usize][x as usize][0] += col[R] as f64;
+                flimg[y as usize][x as usize][1] += col[G] as f64;
+                flimg[y as usize][x as usize][2] += col[B] as f64;
             }
         }
     }
