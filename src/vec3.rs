@@ -2,7 +2,7 @@
 use std::ops::*;
 use std::fmt;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Vec3 {
     x : f32,
     y : f32,

@@ -74,8 +74,8 @@ fn random_scene(rng : &mut Rng) -> Box<Hitable> {
         even: ConstantTex(vec3(0.2, 0.3, 0.1)),
         odd: ConstantTex(vec3(0.9, 0.9, 0.9)),
     };
-    list.push(box stationary_sphere(1000.0, vec3(0.0, -1000.0, 0.0),
-                                    Rc::new(Lambertian(chexture))));
+    list.push(sphere(1000.0, vec3(0.0, -1000.0, 0.0),
+                     Rc::new(Lambertian(chexture))));
 
     for a in -11..11 {
         for b in -11..11 {
@@ -88,35 +88,35 @@ fn random_scene(rng : &mut Rng) -> Box<Hitable> {
                               0.2,
                               b as f32 + 0.9 * rng.gen::<f32>());
             if (&center - vec3(4.0, 0.2, 0.0)).len() > 0.9 {
-                let sph : Sphere =
+                let sph =
                     if choose_mat < 0.8 { // diffuse
                         let col = vec3(rng.gen(), rng.gen(), rng.gen())
                             * vec3(rng.gen(), rng.gen(), rng.gen());
-                        sphere(0.2,
-                               center.clone(), center + vec3(0.0, 0.5 * rng.gen::<f32>(), 0.0),
+                        moving_sphere(0.2,
+                               center, center + vec3(0.0, 0.5 * rng.gen::<f32>(), 0.0),
                                0.0, 1.0,
                                Rc::new(Lambertian(ConstantTex(col))))
                     } else if choose_mat < 0.95 { //metal
                         let col = (vec3(1.0, 1.0, 1.0)
                                    + vec3(rng.gen(), rng.gen(), rng.gen())) / 2.0;
-                        stationary_sphere(0.2, center,
+                        sphere(0.2, center,
                                           Rc::new(Metal{albedo: col, fuzz: 0.5 * rng.gen::<f32>()}))
                     } else {
-                        stationary_sphere(0.2, center,
-                                          Rc::new(Dielectric{ref_idx: 1.5}))
+                        sphere(0.2, center,
+                                          Rc::new(Dielectric(1.5)))
                     };
-                list.push(box sph);
+                list.push(sph);
             }
         }
     }
 
-    list.push(box stationary_sphere(
+    list.push(sphere(
         1.0, ivec3(0, 1, 0),
-        Rc::new(Dielectric{ref_idx: 1.5})));
-    list.push(box stationary_sphere(
+        Rc::new(Dielectric(1.5))));
+    list.push(sphere(
         1.0, ivec3(-4, 1, 0),
         Rc::new(Lambertian(ConstantTex(vec3(0.4, 0.2, 0.1))))));
-    list.push(box stationary_sphere(
+    list.push(sphere(
         1.0, ivec3(4, 1, 0),
         Rc::new(Metal{albedo: vec3(0.7, 0.6, 0.5),
                       fuzz: 0.0})));
@@ -127,8 +127,8 @@ fn random_scene(rng : &mut Rng) -> Box<Hitable> {
 fn main() {
 
 
-    let x = AABB{min: ZERO3.clone(), max: ZERO3.clone()};
-    let r = ray(ZERO3.clone(), ZERO3.clone(), 0.0);
+    let x = AABB{min: ZERO3, max: ZERO3};
+    let r = ray(ZERO3, ZERO3, 0.0);
     x.hit(&r, (0.0, 1.0));
 
 
@@ -137,30 +137,17 @@ fn main() {
     println!("let seed = {:?};", seed);
     let mut rng : Rng = rand::SeedableRng::from_seed(seed);
 
-    let nx = 200;
-    let ny = 200;
-    let ns = 1000;
-
-    // let world : Vec<Box<Hitable>> = vec![
-    //     box Sphere{ center: vec3(0.0, 0.0, -1.0), radius: 0.5,
-    //                 material: box Lambertian{ albedo: vec3(0.1, 0.2, 0.5) } },
-    //     box Sphere{ center: vec3(0.0, -100.5, -1.0), radius: 100.0,
-    //                 material: box Lambertian{ albedo: vec3(0.8, 0.8, 0.0) } },
-
-    //     box Sphere{ center: vec3(1.0, 0.0, -1.0), radius: 0.5,
-    //                 material: box Metal{ albedo: vec3(0.8, 0.6, 0.2),
-    //                                      fuzz: 0.0 } },
-    //     box Sphere{ center: vec3(-1.0, 0.0, -1.0), radius: 0.5,
-    //                 material: box Dielectric{ ref_idx: 1.5 } },
-    //     box Sphere{ center: vec3(-1.0, 0.0, -1.0), radius: -0.45,
-    //                 material: box Dielectric{ ref_idx: 1.5 } },
-    // ];
+    let nx = 500;
+    let ny = 500;
+    let ns = 100000;
 
     // let world = random_scene(&mut rng);
     // let world = simple_light(&mut rng);
-    let world = cornell_box(&mut rng);
+    // let world = cornell_box(&mut rng);
+    let world = the_next_week(&mut rng);
 
     let lookfrom = ivec3(278, 278, -800);
+    let lookfrom = ivec3(478, 278, -600);
     let lookat = ivec3(278, 278, 0);
     let dist_to_focus = 10.0;
     let aperture = 0.0;
@@ -172,13 +159,13 @@ fn main() {
                      0.0, 1.0);
 
 
-    let mut counter = 0;
-    let log_tick_maybe = |counter : i32| -> bool {
+    let log_tick_maybe = |s : i32| -> bool {
         let pcent = |n : i32| (100 * n / ns as i32);
-        let pc_last = pcent(counter - 1);
-        let pc_now = pcent(counter);
-        if pc_now % 5 == 0 && pc_now != pc_last {
-            print!("{} ", pc_now);
+        let pc_last = pcent(s - 1);
+        let pc_now = pcent(s);
+        // if pc_now % 1 == 0 && pc_now != pc_last {
+        if true {
+            print!("{} ", s);
             io::stdout().flush().unwrap();
             return true;
         }
@@ -192,7 +179,7 @@ fn main() {
     let mut flimg : &mut [&mut [Vec3]] = grid_base.as_mut_slice();
 
     for s in 0..ns {
-        if log_tick_maybe(counter) {
+        if log_tick_maybe(s as i32) {
             write_buffer(nx, ny, s, flimg);
         }
 
@@ -207,14 +194,11 @@ fn main() {
                 flimg[y as usize][x as usize] += color(&mut rng, r, &*world);
             }
         }
-        counter += 1;
     }
-
-    log_tick_maybe(counter);
     write_buffer(nx, ny, ns, flimg);
 }
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 struct Ray {
     origin : Vec3,
     direction : Vec3,
@@ -278,6 +262,7 @@ trait Hitable {
     fn bounding_box(&self, time : (f32, f32)) -> AABB;
 }
 
+#[derive(Clone)]
 struct Sphere {
     material : Rc<Material>,
     center0 : Vec3, dcenter : Vec3,
@@ -292,22 +277,24 @@ impl Sphere {
 }
 
 
-fn sphere(radius : f32,
+fn moving_sphere(radius : f32,
           center0 : Vec3, center1 : Vec3,
           time0 : f32, time1 : f32,
           material : Rc<Material>,
-) -> Sphere {
+) -> Box<Sphere> {
     let dcenter = (&center1 - &center0) / (&time1 - &time0);
-    return Sphere {
+    box Sphere {
         material: material,
         center0: &center0 - time0 * &dcenter,
         dcenter: dcenter,
         radius: radius,
-    };
+    }
 }
 
-fn stationary_sphere(radius : f32, center : Vec3, material : Rc<Material>) -> Sphere {
-    return sphere(radius, center.clone(), center, 0.0, 1.0, material);
+fn sphere(
+    radius : f32, center : Vec3, material : Rc<Material>
+) -> Box<Sphere> {
+    moving_sphere(radius, center, center, 0.0, 1.0, material)
 }
 
 impl Hitable for Sphere {
@@ -380,7 +367,7 @@ fn camera(lookfrom : Vec3, lookat : Vec3, vup : Vec3,
     let v = cross(&w, &u);
 
     return Camera {
-        origin: lookfrom.clone(),
+        origin: lookfrom,
         lower_left_corner: lookfrom
             - half_width * focus_dist * &u
             - half_height * focus_dist * &v
@@ -427,7 +414,7 @@ impl<T : Texture> Material for Lambertian<T> {
         let target = hit.p + hit.normal + rand_in_ball(rng);
         let direction = target - hit.p;
 
-        return Some((ray(hit.p.clone(), direction, r_in.time),
+        return Some((ray(hit.p, direction, r_in.time),
                      albedo.tex_lookup(hit.uv, &hit.p)));
     }
 }
@@ -466,18 +453,19 @@ impl Material for Metal {
         if dot(scattered, hit.normal) <= 0.0 {
             return None
         }
-        return Some((ray(hit.p.clone(), scattered, r_in.time),
-                     self.albedo.clone()));
+        return Some((ray(hit.p, scattered, r_in.time),
+                     self.albedo));
     }
 }
 
-struct Dielectric {
-    ref_idx : f32,
-}
+struct Dielectric(f32);
 
 impl Material for Dielectric {
-    fn scatter(&self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord)
-               -> Option<(Ray, Vec3)> {
+    fn scatter(
+        &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
+    ) -> Option<(Ray, Vec3)> {
+        let &Dielectric(ref_idx) = self;
+
         let dir = r_in.direction.unit();
         let reflected = reflect(dir, hit.normal);
         let attenuation = vec3(1.0, 1.0, 1.0);
@@ -485,18 +473,18 @@ impl Material for Dielectric {
         let (outward_normal, ni_over_nt, cosine) =
             if dot(dir, hit.normal) > 0.0 {
                 (-1.0 * &hit.normal,
-                 self.ref_idx,
-                 self.ref_idx * dot(dir, hit.normal))
+                 ref_idx,
+                 ref_idx * dot(dir, hit.normal))
             } else {
                 (1.0 * &hit.normal,
-                 1.0 / self.ref_idx,
+                 1.0 / ref_idx,
                  -dot(dir, hit.normal))
             };
 
         let out_dir =
             match refract(r_in.direction, outward_normal, ni_over_nt) {
                 Some(refracted) => {
-                    let reflect_prob = schlick(cosine, self.ref_idx);
+                    let reflect_prob = schlick(cosine, ref_idx);
                     if rng.gen::<f32>() < reflect_prob {
                         reflected
                     } else {
@@ -505,7 +493,7 @@ impl Material for Dielectric {
                 },
                 None => reflected
             };
-        return Some((ray(hit.p.clone(), out_dir, r_in.time), attenuation));
+        return Some((ray(hit.p, out_dir, r_in.time), attenuation));
 
     }
 }
@@ -877,13 +865,13 @@ fn simple_light(rng : &mut Rng) -> Box<Hitable> {
     let marble_material = Rc::new(Lambertian(ntex.clone()));
 
     // floor
-    list.push(box stationary_sphere(
+    list.push(sphere(
         1000.0, ivec3(0, -1000, 0),
         marble_material.clone(),
     ));
 
     // marble sphere
-    list.push(box stationary_sphere(
+    list.push(sphere(
         2.0, ivec3(0, 2, 0),
         marble_material.clone(),
     ));
@@ -891,7 +879,7 @@ fn simple_light(rng : &mut Rng) -> Box<Hitable> {
     let light_material = Rc::new(DiffuseLight(ConstantTex(ivec3(4, 4, 4))));
 
     // sphere light
-    list.push(box stationary_sphere(
+    list.push(sphere(
         2.0, ivec3(0, 7, 0),
         light_material.clone()));
 
@@ -906,6 +894,7 @@ fn simple_light(rng : &mut Rng) -> Box<Hitable> {
     return into_bvh(rng, list, (0.0, 1.0));
 }
 
+#[allow(dead_code)]
 fn cornell_box(rng : &mut Rng) -> Box<Hitable> {
     let mut list : Vec<Box<Hitable>> = Vec::new();
 
@@ -921,10 +910,10 @@ fn cornell_box(rng : &mut Rng) -> Box<Hitable> {
     list.push(XZRect::new((0.0, 555.0), (0.0, 555.0), 0.0, &white, false));
     list.push(XYRect::new((0.0, 555.0), (0.0, 555.0), 555.0, &white, true));
 
-    let b1 = translate(ivec3(130, 1, 65),
+    let b1 = translate(ivec3(130, 0, 65),
                        rotate(ivec3(0, 1, 0), -18.0,
                               cube(ivec3(0, 0, 0), ivec3(165, 165, 165), &white)));
-    let b2 = translate(ivec3(265, 1, 295),
+    let b2 = translate(ivec3(265, 0, 295),
                        rotate(ivec3(0, 1, 0), 15.0,
                               cube(ivec3(0, 0, 0), ivec3(165, 330, 165), &white)));
 
@@ -975,7 +964,7 @@ struct Translate {
     offset : Vec3,
 }
 
-fn translate(offset : Vec3, inner : Box<Hitable>) -> Box<Hitable> {
+fn translate(offset : Vec3, inner : Box<Hitable>) -> Box<Translate> {
     box Translate {
         inner: inner,
         offset: offset,
@@ -1005,7 +994,7 @@ struct Rotate {
     mat : Mat3,
 }
 
-fn rotate(axis : Vec3, angle : f32, inner : Box<Hitable>) -> Box<Hitable> {
+fn rotate(axis : Vec3, angle : f32, inner : Box<Hitable>) -> Box<Rotate> {
     let ct = (-angle).to_radians().cos();
     let st = (-angle).to_radians().sin();
     let u = axis.unit();
@@ -1068,25 +1057,28 @@ impl Hitable for ConstantMedium {
     fn hit(
         &self, rng : &mut Rng, r : &Ray, dist : (f32, f32)
     ) -> Option<HitRecord> {
-        let mhit1 = self.boundary.hit(rng, r, dist);
+        let db = rng.gen::<f32>() < 0.00001;
+        let db = false;
+        let mhit1 = self.boundary.hit(rng, r, (f32::MIN, f32::MAX));
         if let Some(mut hit1) = mhit1 {
-            let mhit2 = self.boundary.hit(rng, r, (hit1.t + 0.0001, dist.1));
+            let mhit2 = self.boundary.hit(rng, r, (hit1.t + 0.0001, f32::MAX));
             if let Some(mut hit2) = mhit2 {
-                // assert!(hit1.t >= dist.0);
+                if db {println!("\nt0, t1 = {}, {}", hit1.t, hit2.t)}
                 hit1.t = hit1.t.max(dist.0);
-                // assert!(hit2.t <= dist.1);
                 hit2.t = hit2.t.min(dist.1);
-                // assert!(hit1.t > hit2.t);
-                if hit1.t > hit2.t {
+                if hit1.t >= hit2.t {
                     return None
                 }
                 hit1.t = hit1.t.max(0.0);
 
                 let dist_inside = (hit2.t - hit1.t) * r.direction.len();
-                let hit_dist = -(rng.gen::<f32>().ln()) / self.density;
+                let hit_dist = -(1.0 / self.density) * rng.gen::<f32>().ln();
+                if db {println!("hit_dist = {}", hit_dist)}
                 if hit_dist < dist_inside {
                     let t = hit1.t + hit_dist / r.direction.len();
+                    if db {println!("hit.t = {}", t)}
                     let p = r.at(t);
+                    if db {println!("hit.p = {}", p)}
                     let normal = ivec3(1, 0, 0);
                     return Some(HitRecord {
                         t: t, p: p,
@@ -1112,7 +1104,94 @@ impl<T : Texture> Material for Isotropic<T> {
     ) -> Option<(Ray, Vec3)> {
         let Isotropic(ref albedo) = *self;
         let mut r = (*r_in).clone();
+        r.origin = hit.p;
         r.direction = rand_in_ball(rng).unit();
         Some((r, albedo.tex_lookup(hit.uv, &hit.p)))
     }
+}
+
+fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
+    let mut list : Vec<Box<Hitable>> = Vec::new();
+    let mut boxlist : Vec<Box<Hitable>> = Vec::new();
+    let mut boxlist2 : Vec<Box<Hitable>> = Vec::new();
+
+    let white : Rc<Material> =
+        Rc::new(Lambertian(ConstantTex(0.73 * ONE3)));
+    let ground : Rc<Material> =
+        Rc::new(Lambertian(ConstantTex(vec3(0.48, 0.83, 0.53))));
+    let red : Rc<Material> =
+        Rc::new(Lambertian(ConstantTex(ivec3(1, 0, 0))));
+    let light : Rc<Material> =
+        Rc::new(DiffuseLight(ConstantTex(7.0 * ONE3)));
+
+    let nb = 20;
+    for i in 0..nb {
+        for j in 0..nb {
+            let w = 100.0;
+            let x0 = -1000.0 + w * i as f32;
+            let z0 = -1000.0 + w * j as f32;
+            let y0 = 0.0;
+            let x1 = x0 + w;
+            let mut y1 = 100.0 * (rng.gen::<f32>() + 0.01);
+            let z1 = z0 + w;
+
+            if i == 12 && j == 10 {
+                y1 = 100.0;
+            }
+
+            boxlist.push(cube(vec3(x0, y0, z0), vec3(x1, y1, z1), &ground));
+        }
+    }
+
+    list.push(into_bvh(rng, boxlist, (0.0, 1.0)));
+    let bb = list[0].bounding_box((0.0, 1.0));
+    println!("{}, {}", bb.min, bb.max);
+    list.push(XZRect::new((123.0, 423.0), (147.0, 412.0), 554.0, &light, false));
+    let center = ivec3(400, 400, 200);
+    list.push(moving_sphere(50.0, center, center + ivec3(30, 0, 0), 0.0, 1.0,
+                     Rc::new(Lambertian(ConstantTex(vec3(0.7, 0.3, 0.1))))));
+    list.push(sphere(50.0, ivec3(260, 150, 45),
+                                Rc::new(Dielectric(1.5))));
+    list.push(sphere(50.0, ivec3(0, 150, 145),
+                                Rc::new(Metal{
+                                    albedo: vec3(0.8, 0.8, 0.9),
+                                    fuzz: 10.0,
+                                })));
+    let boundary = sphere(70.0, ivec3(360, 150, 145),
+                                     Rc::new(Dielectric(1.5)));
+    list.push(boundary.clone());
+    list.push(box ConstantMedium {
+        boundary: boundary,
+        density: 0.2,
+        phase_function: box Isotropic(ConstantTex(vec3(0.2, 0.4, 0.9))),
+    });
+    let boundary = sphere(5000.0, ivec3(0, 0, 0),
+                                     Rc::new(Dielectric(1.5)));
+    list.push(box ConstantMedium {
+        boundary: boundary,
+        density: 0.0001,
+        phase_function: box Isotropic(ConstantTex(ivec3(1, 1, 1))),
+    });
+
+    let img = image::open(&Path::new("earth.png")).unwrap();
+    let earth = Rc::new(Lambertian(image_texture(&img)));
+    list.push(sphere(100.0, ivec3(400, 200, 400), earth));
+
+    let marble = Rc::new(Lambertian(
+        PerlinTexture {
+            noise: Rc::new(PerlinNoise::new(rng, 256)),
+            scale: 4.0,
+        }));
+    list.push(sphere(80.0, ivec3(220, 280, 300), marble));
+
+    let nspheres = 1000;
+    for i in 0..nspheres {
+        let center = 165.0 * vec3(rng.gen(), rng.gen(), rng.gen());
+        boxlist2.push(sphere(10.0, center, white.clone()));
+    }
+    list.push(translate(ivec3(-100, 270, 395),
+                        rotate(ivec3(0, 1, 0), 15.0,
+                               into_bvh(rng, boxlist2, (0.0, 1.0)))));
+
+    return into_bvh(rng, list, (0.0, 1.0));
 }
