@@ -137,9 +137,9 @@ fn main() {
     println!("let seed = {:?};", seed);
     let mut rng : Rng = rand::SeedableRng::from_seed(seed);
 
-    let nx = 400;
-    let ny = 400;
-    let ns = 10000;
+    let nx = 200;
+    let ny = 200;
+    let ns = 1000;
 
     // let world : Vec<Box<Hitable>> = vec![
     //     box Sphere{ center: vec3(0.0, 0.0, -1.0), radius: 0.5,
@@ -237,7 +237,7 @@ fn color(rng : &mut Rng, r0 : Ray, world : &Hitable) -> Vec3 {
     let mut attenuation = vec3(1.0, 1.0, 1.0);
     let mut r = r0;
     for ttl in 0..50 {
-        match world.hit(&r, (0.001, f32::INFINITY)) {
+        match world.hit(rng, &r, (0.001, f32::INFINITY)) {
             Some(hit) => {
                 let emitted = hit.material.emitted(hit.uv, &hit.p);
                 accumulator += emitted * attenuation;
@@ -274,7 +274,7 @@ struct HitRecord<'a> {
 }
 
 trait Hitable {
-    fn hit(&self, r : &Ray, dist : (f32, f32)) -> Option<HitRecord>;
+    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord>;
     fn bounding_box(&self, time : (f32, f32)) -> AABB;
 }
 
@@ -311,7 +311,7 @@ fn stationary_sphere(radius : f32, center : Vec3, material : Rc<Material>) -> Sp
 }
 
 impl Hitable for Sphere {
-    fn hit(&self, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
         let center = self.center(r.time);
         let oc = &r.origin - &center;
         let a = dot(r.direction, r.direction);
@@ -549,10 +549,10 @@ struct BVHNode {
 }
 
 impl Hitable for BVHNode {
-    fn hit<'a>(&'a self, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
         if self.bbox.hit(r, dist) {
-            let l_hit = self.left.hit(r, dist);
-            let r_hit = self.right.hit(r, dist);
+            let l_hit = self.left.hit(rng, r, dist);
+            let r_hit = self.right.hit(rng, r, dist);
             return match (l_hit, r_hit) {
                 (None, h) => h,
                 (h, None) => h,
@@ -821,7 +821,7 @@ macro_rules! aarect {
         }
 
         impl Hitable for $XYRect {
-            fn hit(&self, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+            fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
                 let t = (self.$z - r.origin[$Z]) / r.direction[$Z];
                 if !(dist.0 < t && t < dist.1) {
                     return None;
@@ -912,21 +912,32 @@ fn cornell_box(rng : &mut Rng) -> Box<Hitable> {
     let red : Rc<Material> = Rc::new(Lambertian(ConstantTex(vec3(0.65, 0.05, 0.05))));
     let white : Rc<Material> = Rc::new(Lambertian(ConstantTex(0.73 * ONE3)));
     let green : Rc<Material> = Rc::new(Lambertian(ConstantTex(vec3(0.12, 0.45, 0.15))));
-    let light : Rc<Material> = Rc::new(DiffuseLight(ConstantTex(15.0 * ONE3)));
+    let light : Rc<Material> = Rc::new(DiffuseLight(ConstantTex(7.0 * ONE3)));
 
     list.push(YZRect::new((0.0, 555.0), (0.0, 555.0), 555.0, &green, true));
     list.push(YZRect::new((0.0, 555.0), (0.0, 555.0), 0.0, &red, false));
-    list.push(XZRect::new((213.0, 343.0), (227.0, 332.0), 554.0, &light, false));
+    list.push(XZRect::new((113.0, 443.0), (127.0, 432.0), 554.0, &light, false));
     list.push(XZRect::new((0.0, 555.0), (0.0, 555.0), 555.0, &white, true));
     list.push(XZRect::new((0.0, 555.0), (0.0, 555.0), 0.0, &white, false));
     list.push(XYRect::new((0.0, 555.0), (0.0, 555.0), 555.0, &white, true));
 
-    list.push(translate(ivec3(130, 0, 65),
-                        rotate(ivec3(0, 1, 0), -18.0,
-                               cube(ivec3(0, 0, 0), ivec3(165, 165, 165), &white))));
-    list.push(translate(ivec3(265, 0, 295),
-                        rotate(ivec3(0, 1, 0), 15.0,
-                               cube(ivec3(0, 0, 0), ivec3(165, 330, 165), &white))));
+    let b1 = translate(ivec3(130, 1, 65),
+                       rotate(ivec3(0, 1, 0), -18.0,
+                              cube(ivec3(0, 0, 0), ivec3(165, 165, 165), &white)));
+    let b2 = translate(ivec3(265, 1, 295),
+                       rotate(ivec3(0, 1, 0), 15.0,
+                              cube(ivec3(0, 0, 0), ivec3(165, 330, 165), &white)));
+
+    list.push(box ConstantMedium {
+        boundary: b1,
+        density: 0.01,
+        phase_function: box Isotropic(ConstantTex(ivec3(1, 1, 1))),
+    });
+    list.push(box ConstantMedium {
+        boundary: b2,
+        density: 0.01,
+        phase_function: box Isotropic(ConstantTex(ivec3(0, 0, 0))),
+    });
 
     return into_bvh(rng, list, (0.0, 1.0));
 }
@@ -934,9 +945,9 @@ fn cornell_box(rng : &mut Rng) -> Box<Hitable> {
 struct FlipNormals<H : Hitable>(H);
 
 impl<H : Hitable> Hitable for FlipNormals<H> {
-    fn hit(&self, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
         let FlipNormals(ref inner) = *self;
-        inner.hit(r, dist).map(|mut hit| {
+        inner.hit(rng, r, dist).map(|mut hit| {
             hit.normal = -1.0 * hit.normal;
             return hit;
         })
@@ -972,10 +983,10 @@ fn translate(offset : Vec3, inner : Box<Hitable>) -> Box<Hitable> {
 }
 
 impl Hitable for Translate {
-    fn hit(&self, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
         let mut r = (*r).clone();
         r.origin -= self.offset;
-        self.inner.hit(&r, dist).map(|mut hit| {
+        self.inner.hit(rng, &r, dist).map(|mut hit| {
             hit.p += self.offset;
             hit
         })
@@ -1022,11 +1033,11 @@ fn rotate(axis : Vec3, angle : f32, inner : Box<Hitable>) -> Box<Hitable> {
 }
 
 impl Hitable for Rotate {
-    fn hit(&self, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
         let mut r = (*r).clone();
         r.origin = self.mat * r.origin;
         r.direction = self.mat * r.direction;
-        self.inner.hit(&r, dist).map(|mut hit| {
+        self.inner.hit(rng, &r, dist).map(|mut hit| {
             let inv = self.mat.transpose();
             hit.p = inv * hit.p;
             hit.normal = inv * hit.normal;
@@ -1044,5 +1055,64 @@ impl Hitable for Rotate {
             }
         }
         b
+    }
+}
+
+struct ConstantMedium {
+    boundary : Box<Hitable>,
+    density : f32,
+    phase_function : Box<Material>,
+}
+
+impl Hitable for ConstantMedium {
+    fn hit(
+        &self, rng : &mut Rng, r : &Ray, dist : (f32, f32)
+    ) -> Option<HitRecord> {
+        let mhit1 = self.boundary.hit(rng, r, dist);
+        if let Some(mut hit1) = mhit1 {
+            let mhit2 = self.boundary.hit(rng, r, (hit1.t + 0.0001, dist.1));
+            if let Some(mut hit2) = mhit2 {
+                // assert!(hit1.t >= dist.0);
+                hit1.t = hit1.t.max(dist.0);
+                // assert!(hit2.t <= dist.1);
+                hit2.t = hit2.t.min(dist.1);
+                // assert!(hit1.t > hit2.t);
+                if hit1.t > hit2.t {
+                    return None
+                }
+                hit1.t = hit1.t.max(0.0);
+
+                let dist_inside = (hit2.t - hit1.t) * r.direction.len();
+                let hit_dist = -(rng.gen::<f32>().ln()) / self.density;
+                if hit_dist < dist_inside {
+                    let t = hit1.t + hit_dist / r.direction.len();
+                    let p = r.at(t);
+                    let normal = ivec3(1, 0, 0);
+                    return Some(HitRecord {
+                        t: t, p: p,
+                        normal: normal, material: &*self.phase_function,
+                        uv: (0.0, 0.0),
+                    })
+                }
+            }
+        }
+        return None
+    }
+
+    fn bounding_box(&self, time : (f32, f32)) -> AABB {
+        self.boundary.bounding_box(time)
+    }
+}
+
+struct Isotropic<T : Texture>(T);
+
+impl<T : Texture> Material for Isotropic<T> {
+    fn scatter(
+        &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
+    ) -> Option<(Ray, Vec3)> {
+        let Isotropic(ref albedo) = *self;
+        let mut r = (*r_in).clone();
+        r.direction = rand_in_ball(rng).unit();
+        Some((r, albedo.tex_lookup(hit.uv, &hit.p)))
     }
 }
