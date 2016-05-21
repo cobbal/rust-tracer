@@ -1337,7 +1337,7 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
         }
     }
 
-    let complicated_geom = false;
+    let complicated_geom = true;
 
     if complicated_geom {
         //complicated ground
