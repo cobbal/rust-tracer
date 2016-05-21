@@ -10,10 +10,10 @@
 NotebookFileLineBreakTest
 NotebookFileLineBreakTest
 NotebookDataPosition[       157,          7]
-NotebookDataLength[      5051,        157]
-NotebookOptionsPosition[      4797,        143]
-NotebookOutlinePosition[      5151,        159]
-CellTagsIndexPosition[      5108,        156]
+NotebookDataLength[      4780,        148]
+NotebookOptionsPosition[      4526,        134]
+NotebookOutlinePosition[      4880,        150]
+CellTagsIndexPosition[      4837,        147]
 WindowFrame->Normal*)
 
 (* Beginning of Notebook Content *)
@@ -111,15 +111,6 @@ Cell[BoxData[{
   ";"}], "\[IndentingNewLine]", 
  RowBox[{
   RowBox[{"blurred", "=", 
-   RowBox[{"Nest", "[", 
-    RowBox[{
-     RowBox[{
-      RowBox[{"GaussianFilter", "[", 
-       RowBox[{"#", ",", "20", ",", 
-        RowBox[{"Padding", "\[Rule]", "0"}]}], "]"}], "&"}], ",", "tim", ",", 
-     "3"}], "]"}]}], ";"}], "\[IndentingNewLine]", 
- RowBox[{
-  RowBox[{"blurred", "=", 
    RowBox[{"GaussianFilter", "[", 
     RowBox[{"tim", ",", "5"}], "]"}]}], ";"}], "\[IndentingNewLine]", 
  RowBox[{
@@ -139,7 +130,7 @@ Cell[BoxData[{
    3.672814985248069*^9}, {3.672815046078991*^9, 3.672815078426659*^9}, {
    3.672815193617526*^9, 3.672815193743864*^9}, {3.672815255557266*^9, 
    3.6728152777878523`*^9}, {3.672815321651887*^9, 3.6728154357257957`*^9}, 
-   3.6728155327005653`*^9}]
+   3.6728155327005653`*^9, 3.6728169532732983`*^9}]
 },
 WindowSize->{740, 755},
 WindowMargins->{{4, Automatic}, {Automatic, 4}},
@@ -158,7 +149,7 @@ CellTagsIndex->{}
 *)
 (*NotebookFileOutline
 Notebook[{
-Cell[557, 20, 4236, 121, 352, "Input"]
+Cell[557, 20, 3965, 112, 335, "Input"]
 }
 ]
 *)

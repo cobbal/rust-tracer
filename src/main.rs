@@ -1409,7 +1409,7 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
         }));
     list.push(sphere(80.0, ivec3(220, 280, 300), marble));
 
-    for i in 0..200 {
+    for i in 0..400 {
         let rvec : Vec3 = rng.gen();
         let rvec = (rand_in_ball(rng).unit() + ivec3(1, 1, 1)) / 2.0;
         let center = rvec * 165.0;
