@@ -1384,7 +1384,7 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
         boxlist2.push(sphere(10.0, center, white.clone()));
     }
 
-    if false && complicated_geom {
+    if complicated_geom {
         list.push(translate(ivec3(-100, 270, 395),
                         // rotate(ivec3(0, 1, 0), 15.0,
                         into_bvh(rng, boxlist2, (0.0, 1.0))));
