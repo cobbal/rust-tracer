@@ -1334,6 +1334,9 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
             if i == 3 && j == 1 {
                 y1 = 80.0;
             }
+            if i == 4 && j == 1 {
+                y1 = 30.0;
+            }
 
             boxlist.push(cube(vec3(x0, y0, z0), vec3(x1, y1, z1), &ground));
         }
