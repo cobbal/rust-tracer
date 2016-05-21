@@ -1,2 +1,3 @@
 run:
-	cargo run --release
+	cargo build --release
+	time ./target/release/rust-tracer

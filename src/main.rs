@@ -301,6 +301,7 @@ fn render_overlord(base_rng : &mut Rng, ns : u32, render_task : RenderTask) {
     }
 
     write_buffer("trace.png", &main_target);
+    write_hdr("raw.rgb", &main_target);
 }
 
 fn render_a_frame(rng : &mut Rng, task : &RenderTask, target : &mut RenderTarget) {
@@ -1311,8 +1312,8 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
         Arc::new(Lambertian(ConstantTex(ivec3(1, 0, 0))));
 
     let nb = 20;
-    let gi = -5..5;
-    let gj = -2..10;
+    let gi = -10..10;
+    let gj = -5..10;
     let w = 100.0;
     for i in gi.clone() {
         for j in gj.clone() {
