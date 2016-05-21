@@ -330,7 +330,7 @@ fn main() {
     x.hit(&r, (0.0, 1.0));
 
     let seed : RngSeed = rand::thread_rng().gen();
-    let seed = [3408051256, 1588970182, 1706835444, 1788718848];
+    let seed = [4221229915, 2284345502, 1839295593, 2276192001];
     println!("let seed = {:?};", seed);
     let mut rng : Rng = Rng::from_seed(seed);
 
@@ -1325,9 +1325,11 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
             let z1 = z0 + w;
 
             // make sure we see the caustics
-
             if i == 2 && j == 0 {
                 y1 = 90.0;
+            }
+            if i == 2 && j == -1 {
+                y1 = 70.0;
             }
             if i == 3 && j == 1 {
                 y1 = 80.0;
