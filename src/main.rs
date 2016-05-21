@@ -27,10 +27,12 @@ use std::ops::{Index, IndexMut};
 extern crate image;
 extern crate rand;
 extern crate num_cpus;
+extern crate byteorder;
 
 use rand::distributions::{IndependentSample, Range};
 use rand::SeedableRng;
 use rand::Rng as RngTrait;
+// use byteorder::{ByteOrder, LittleEndian};
 
 type RngSeed = [u32; 4];
 type Rng = rand::XorShiftRng;
@@ -79,6 +81,29 @@ impl IndexMut<(u32, u32)> for RenderTarget {
     fn index_mut<'a>(&'a mut self, (x, y) : (u32, u32)) -> &'a mut [f64; 3] {
         &mut self.buf[(y * self.size.0 + x) as usize]
     }
+}
+
+fn write_hdr(filename : &str, flimg : &RenderTarget) {
+    let ref mut fout = File::create(&Path::new(filename)).unwrap();
+
+    let bytes = unsafe {
+        let ptr : *const u8 = std::mem::transmute(&flimg.buf[0][0] as *const _);
+        let len = 8 * flimg.size.0 * flimg.size.1 * 3;
+        std::slice::from_raw_parts(ptr, len as usize)
+    };
+
+    write!(fout, "{} {} {}\n\n",
+           flimg.size.0, flimg.size.1, flimg.samples).unwrap();
+    fout.write(bytes).unwrap();
+
+    // for p in &flimg.buf {
+    //     let mut buf = [0; 8 * 3];
+    //     for i in 0..3 {
+    //         LittleEndian::write_f64(&mut buf[(8 * i)..(8 * (i + 1))], p[i]);
+    //     }
+
+    //     fout.write(&buf).unwrap();
+    // }
 }
 
 fn write_buffer(filename : &str, flimg : &RenderTarget) {
@@ -257,6 +282,7 @@ fn render_overlord(base_rng : &mut Rng, ns : u32, render_task : RenderTask) {
 
         if prev_samp / nsave != main_target.samples / nsave {
             write_buffer("trace.png", &main_target);
+            write_hdr("raw.rgb", &main_target);
 
             print!("{} ", main_target.samples);
             io::stdout().flush().unwrap();
@@ -1310,7 +1336,7 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
         }
     }
 
-    let complicated_geom = true;
+    let complicated_geom = false;
 
     if complicated_geom {
         //complicated ground
