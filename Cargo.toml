@@ -10,3 +10,4 @@ debug = true
 image = "*"
 mdo = "*"
 rand = "*"
+num_cpus = "*"

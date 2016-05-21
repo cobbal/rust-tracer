@@ -19,18 +19,25 @@ use std::io::Write;
 use std::cmp::{max, min, Ordering};
 use std::f32;
 use std::f32::consts::PI;
-use std::rc::Rc;
+use std::sync::Arc;
+use std::thread;
+use std::sync::mpsc::{channel, sync_channel, Sender};
+use std::ops::{Index, IndexMut};
 
 extern crate image;
 extern crate rand;
+extern crate num_cpus;
 
 use rand::distributions::{IndependentSample, Range};
+use rand::SeedableRng;
 use rand::Rng as RngTrait;
+
+type RngSeed = [u32; 4];
 type Rng = rand::XorShiftRng;
 
 fn rand_in_ball(rng : &mut Rng) -> Vec3 {
     loop {
-        let p = 2.0 * vec3(rng.gen(), rng.gen(), rng.gen()) - vec3(1.0, 1.0, 1.0);
+        let p = 2.0 * rng.gen::<Vec3>() - vec3(1.0, 1.0, 1.0);
         if dot(p, p) < 1.0 {
             return p;
         }
@@ -39,19 +46,49 @@ fn rand_in_ball(rng : &mut Rng) -> Vec3 {
 
 fn rand_in_disk(rng : &mut Rng) -> Vec3 {
     loop {
-        let p = 2.0 * vec3(rng.gen(), rng.gen(), 0.0) - vec3(1.0, 1.0, 0.0);
+        let p = ivec3(2, 2, 0) * rng.gen::<Vec3>() - vec3(1.0, 1.0, 0.0);
         if dot(p, p) < 1.0 {
             return p;
         }
     }
 }
 
-fn write_buffer(nx : u32, ny : u32, ns : u32, flimg : &mut [&mut [[f64; 3]]]) {
+struct RenderTarget {
+    size : (u32, u32),
+    buf : Vec<[f64; 3]>,
+    samples : u32,
+}
+
+impl RenderTarget {
+    fn new(size : (u32, u32)) -> RenderTarget {
+        RenderTarget{
+            size: size,
+            buf: vec![[0.0; 3]; (size.0 * size.1) as usize],
+            samples: 0,
+        }
+    }
+}
+
+impl Index<(u32, u32)> for RenderTarget {
+    type Output = [f64; 3];
+    fn index(&self, (x, y) : (u32, u32)) -> &[f64; 3] {
+        &self.buf[(y * self.size.0 + x) as usize]
+    }
+}
+impl IndexMut<(u32, u32)> for RenderTarget {
+    fn index_mut<'a>(&'a mut self, (x, y) : (u32, u32)) -> &'a mut [f64; 3] {
+        &mut self.buf[(y * self.size.0 + x) as usize]
+    }
+}
+
+fn write_buffer(filename : &str, flimg : &RenderTarget) {
+    let (nx, ny) = flimg.size;
+    let ns = flimg.samples;
     let mut img = image::DynamicImage::new_rgb8(nx, ny);
 
     for y in 0..ny {
         for x in 0..nx {
-            let mut col = flimg[y as usize][x as usize].clone();
+            let mut col = flimg[(x, y)].clone();
             col[0] = (col[0] / ns as f64).max(0.0).min(1.0).sqrt();
             col[1] = (col[1] / ns as f64).max(0.0).min(1.0).sqrt();
             col[2] = (col[2] / ns as f64).max(0.0).min(1.0).sqrt();
@@ -59,10 +96,11 @@ fn write_buffer(nx : u32, ny : u32, ns : u32, flimg : &mut [&mut [[f64; 3]]]) {
             let ir = (255.99 * col[0]) as u8;
             let ig = (255.99 * col[1]) as u8;
             let ib = (255.99 * col[2]) as u8;
-            img.as_mut_rgb8().unwrap()[(x, y)] = image::Rgb([ir, ig, ib])
+            img.as_mut_rgb8().unwrap()[(x, ny - y - 1)]
+                = image::Rgb([ir, ig, ib]);
         }
     }
-    let ref mut fout = File::create(&Path::new("trace.png")).unwrap();
+    let ref mut fout = File::create(&Path::new(filename)).unwrap();
     let _ = img.save(fout, image::PNG);
 }
 
@@ -75,7 +113,7 @@ fn random_scene(rng : &mut Rng) -> Box<Hitable> {
         odd: ConstantTex(vec3(0.9, 0.9, 0.9)),
     };
     list.push(sphere(1000.0, vec3(0.0, -1000.0, 0.0),
-                     Rc::new(Lambertian(chexture))));
+                     Arc::new(Lambertian(chexture))));
 
     for a in -11..11 {
         for b in -11..11 {
@@ -90,20 +128,18 @@ fn random_scene(rng : &mut Rng) -> Box<Hitable> {
             if (&center - vec3(4.0, 0.2, 0.0)).len() > 0.9 {
                 let sph =
                     if choose_mat < 0.8 { // diffuse
-                        let col = vec3(rng.gen(), rng.gen(), rng.gen())
-                            * vec3(rng.gen(), rng.gen(), rng.gen());
+                        let col = rng.gen::<Vec3>() * rng.gen::<Vec3>();
                         moving_sphere(0.2,
                                center, center + vec3(0.0, 0.5 * rng.gen::<f32>(), 0.0),
                                0.0, 1.0,
-                               Rc::new(Lambertian(ConstantTex(col))))
+                               Arc::new(Lambertian(ConstantTex(col))))
                     } else if choose_mat < 0.95 { //metal
-                        let col = (vec3(1.0, 1.0, 1.0)
-                                   + vec3(rng.gen(), rng.gen(), rng.gen())) / 2.0;
+                        let col = (vec3(1.0, 1.0, 1.0) + rng.gen::<Vec3>()) / 2.0;
                         sphere(0.2, center,
-                                          Rc::new(Metal{albedo: col, fuzz: 0.5 * rng.gen::<f32>()}))
+                               Arc::new(Metal{albedo: col, fuzz: 0.5 * rng.gen::<f32>()}))
                     } else {
                         sphere(0.2, center,
-                                          Rc::new(Dielectric(1.5)))
+                               Arc::new(Dielectric(1.5)))
                     };
                 list.push(sph);
             }
@@ -112,96 +148,190 @@ fn random_scene(rng : &mut Rng) -> Box<Hitable> {
 
     list.push(sphere(
         1.0, ivec3(0, 1, 0),
-        Rc::new(Dielectric(1.5))));
+        Arc::new(Dielectric(1.5))));
     list.push(sphere(
         1.0, ivec3(-4, 1, 0),
-        Rc::new(Lambertian(ConstantTex(vec3(0.4, 0.2, 0.1))))));
+        Arc::new(Lambertian(ConstantTex(vec3(0.4, 0.2, 0.1))))));
     list.push(sphere(
         1.0, ivec3(4, 1, 0),
-        Rc::new(Metal{albedo: vec3(0.7, 0.6, 0.5),
+        Arc::new(Metal{albedo: vec3(0.7, 0.6, 0.5),
                       fuzz: 0.0})));
 
     return into_bvh(rng, list, (0.0, 1.0));
 }
 
+struct RenderTask {
+    camera : Camera,
+    target_size : (u32, u32),
+    world : Box<Hitable>,
+}
+
+fn render_overlord(base_rng : &mut Rng, ns : u32, render_task : RenderTask) {
+    let render_task = Arc::new(render_task);
+    let (nx, ny) = render_task.target_size;
+    let mut main_target = RenderTarget::new(render_task.target_size);
+
+    enum Task {
+        Frame(u32, RngSeed, RenderTarget),
+        Kill,
+    };
+
+    struct Worker {
+        tx : Sender<Task>,
+        join_handle : thread::JoinHandle<()>,
+    };
+
+    let nworkers = num_cpus::get();
+    println!("running with {} threads", nworkers);
+
+    let (task_tx, task_rx) = sync_channel::<(usize, RenderTarget)>(0);
+
+    let mut workers : Vec<Worker> = vec![];
+
+    for i in 0..nworkers {
+        let task_tx = task_tx.clone();
+        let (wtx, wrx) = channel::<Task>();
+        let render_task = render_task.clone();
+        let thread = thread::spawn(move || {
+            let mut worker_target = RenderTarget::new(render_task.target_size);
+            loop {
+                task_tx.send((i, worker_target)).unwrap();
+                match wrx.recv().unwrap() {
+                    Task::Kill => {
+                        println!("thread {} exiting", i);
+                        break;
+                    },
+                    Task::Frame(s, seed, returned_target) => {
+                        worker_target = returned_target;
+                        let mut rng = Rng::from_seed(seed);
+                        render_a_frame(&mut rng, &render_task, &mut worker_target);
+
+                        // print!("{}:{} ", i, s);
+                        // io::stdout().flush().unwrap();
+
+                        // let filename = format!("thread-{}.png", i);
+                        // write_buffer(&filename[..], &worker_target);
+                    },
+                }
+            }
+        });
+
+        workers.push(Worker {
+            tx: wtx,
+            join_handle: thread,
+        })
+    }
+
+    let copy_to_main_target =
+        |main : &mut RenderTarget, source : &mut RenderTarget| {
+            for y in 0..ny {
+                for x in 0..nx {
+                    for e in 0..3 {
+                        main[(x, y)][e] += source[(x, y)][e];
+                        source[(x, y)][e] = 0.0;
+                    }
+                }
+            }
+            main.samples += source.samples;
+            source.samples = 0;
+        };
+
+    for s in 0..ns {
+        // mix up the seed some or else the generator duplicates itself
+        let mut seed : RngSeed = base_rng.gen();
+        for i in 1..seed.len() {
+            seed[i] += base_rng.gen()
+        }
+
+        let (i, mut worker_target) = task_rx.recv().unwrap();
+
+        let prev_samp = main_target.samples;
+
+        let copy_cutoff = if s < 100 { 0 } else { 20 };
+
+        if worker_target.samples >= copy_cutoff {
+            copy_to_main_target(&mut main_target, &mut worker_target);
+        }
+
+        let nsave = 10;
+
+        if prev_samp / nsave != main_target.samples / nsave {
+            write_buffer("trace.png", &main_target);
+
+            print!("{} ", main_target.samples);
+            io::stdout().flush().unwrap();
+        }
+        workers[i].tx.send(Task::Frame(s, seed, worker_target)).unwrap();
+    }
+
+    for i in 0..nworkers {
+        let (i, mut worker_target) = task_rx.recv().unwrap();
+        copy_to_main_target(&mut main_target, &mut worker_target);
+        workers[i].tx.send(Task::Kill).unwrap();
+    }
+
+    for h in workers.into_iter().map(|w| w.join_handle) {
+        h.join().unwrap()
+    }
+
+    write_buffer("trace.png", &main_target);
+}
+
+fn render_a_frame(rng : &mut Rng, task : &RenderTask, target : &mut RenderTarget) {
+    let (nx, ny) = task.target_size;
+    let mut col_sum = ZERO3;
+    for y in 0..ny {
+        for x in 0..nx {
+            let u = (x as f32 + rng.gen::<f32>()) / nx as f32;
+            let v = (y as f32 + rng.gen::<f32>()) / ny as f32;
+
+            let r = task.camera.get_ray(rng, u, v);
+
+            let col = color(rng, r, &*task.world);
+            col_sum += col;
+            for i in 0..3 {
+                target[(x, y)][i] += col[i] as f64;
+            }
+        }
+    }
+    target.samples += 1;
+}
+
 fn main() {
-
-
     let x = AABB{min: ZERO3, max: ZERO3};
     let r = ray(ZERO3, ZERO3, 0.0);
     x.hit(&r, (0.0, 1.0));
 
-
-    // rand::weak_rng();
-    let seed = rand::thread_rng().gen::<[u32; 4]>();
+    let seed : RngSeed = rand::thread_rng().gen();
+    let seed = [3408051256, 1588970182, 1706835444, 1788718848];
     println!("let seed = {:?};", seed);
-    let mut rng : Rng = rand::SeedableRng::from_seed(seed);
+    let mut rng : Rng = Rng::from_seed(seed);
 
     let nx = 500;
     let ny = 500;
     let ns = 100000;
-
-    // let world = random_scene(&mut rng);
-    // let world = simple_light(&mut rng);
-    // let world = cornell_box(&mut rng);
-    let world = the_next_week(&mut rng);
 
     let lookfrom = ivec3(478, 278, -600);
     let lookat = ivec3(278, 278, 0);
     let dist_to_focus = 10.0;
     let aperture = 0.0;
     let vfov = 40.0;
+    let aspect = nx as f32 / ny as f32;
 
     // stare at blue marble
     // let lookat = ivec3(360, 150, 145);
     // let vfov = 15.0;
 
-    let cam = camera(lookfrom, lookat, vec3(0.0, 1.0, 0.0),
-                     vfov, nx as f32 / ny as f32,
-                     aperture, dist_to_focus,
-                     0.0, 1.0);
-
-
-    let log_tick_maybe = |s : i32| -> bool {
-        let pcent = |n : i32| (100 * n / ns as i32);
-        let pc_last = pcent(s - 1);
-        let pc_now = pcent(s);
-        // if pc_now % 1 == 0 && pc_now != pc_last {
-        if true {
-            print!("{} ", s);
-            io::stdout().flush().unwrap();
-            return true;
-        }
-        return false;
+    let task = RenderTask {
+        target_size: (nx, ny),
+        world: the_next_week(&mut rng),
+        camera: camera(lookfrom, lookat, vec3(0.0, 1.0, 0.0),
+                       vfov, aspect,
+                       aperture, dist_to_focus,
+                       0.0, 1.0),
     };
 
-    // http://stackoverflow.com/a/36376568/73681
-    let mut flimg_raw = vec![[0.0; 3]; (nx * ny) as usize];
-    let mut grid_base : Vec<_> =
-        flimg_raw.as_mut_slice().chunks_mut(nx as usize).collect();
-    let mut flimg : &mut [&mut [[f64; 3]]] = grid_base.as_mut_slice();
-
-    for s in 0..ns {
-        if log_tick_maybe(s as i32) {
-            write_buffer(nx, ny, s, flimg);
-        }
-
-        for y in 0..ny {
-            for x in 0..nx {
-
-                let u = (x as f32 + rng.gen::<f32>()) / nx as f32;
-                let v = ((ny - y - 1) as f32 + rng.gen::<f32>()) / ny as f32;
-
-                let r = cam.get_ray(&mut rng, u, v);
-
-                let col = color(&mut rng, r, &*world);
-                flimg[y as usize][x as usize][0] += col[R] as f64;
-                flimg[y as usize][x as usize][1] += col[G] as f64;
-                flimg[y as usize][x as usize][2] += col[B] as f64;
-            }
-        }
-    }
-    write_buffer(nx, ny, ns, flimg);
+    render_overlord(&mut rng, ns, task);
 }
 
 #[derive(Clone,Debug)]
@@ -226,7 +356,8 @@ fn color(rng : &mut Rng, r0 : Ray, world : &Hitable) -> Vec3 {
     let mut accumulator = vec3(0.0, 0.0, 0.0);
     let mut attenuation = vec3(1.0, 1.0, 1.0);
     let mut r = r0;
-    for ttl in 0..50 {
+    let max_ttl = 50;
+    for ttl in 0..max_ttl {
         match world.hit(rng, &r, (0.001, f32::INFINITY)) {
             Some(hit) => {
                 let emitted = hit.material.emitted(hit.uv, &hit.p);
@@ -271,14 +402,14 @@ struct HitRecord<'a> {
     uv : (f32, f32),
 }
 
-trait Hitable {
+trait Hitable : Sync + Send {
     fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord>;
     fn bounding_box(&self, time : (f32, f32)) -> AABB;
 }
 
 #[derive(Clone)]
 struct Sphere {
-    material : Rc<Material>,
+    material : Arc<Material>,
     center0 : Vec3, dcenter : Vec3,
     radius : f32,
 }
@@ -294,7 +425,7 @@ impl Sphere {
 fn moving_sphere(radius : f32,
           center0 : Vec3, center1 : Vec3,
           time0 : f32, time1 : f32,
-          material : Rc<Material>,
+          material : Arc<Material>,
 ) -> Box<Sphere> {
     let dcenter = (&center1 - &center0) / (&time1 - &time0);
     box Sphere {
@@ -306,7 +437,7 @@ fn moving_sphere(radius : f32,
 }
 
 fn sphere(
-    radius : f32, center : Vec3, material : Rc<Material>
+    radius : f32, center : Vec3, material : Arc<Material>
 ) -> Box<Sphere> {
     moving_sphere(radius, center, center, 0.0, 1.0, material)
 }
@@ -352,7 +483,7 @@ impl Hitable for Sphere {
         };
     }
 }
-#[allow(dead_code)]
+#[derive(Clone)]
 struct Camera {
     origin : Vec3,
     lower_left_corner : Vec3,
@@ -410,7 +541,7 @@ impl Camera {
     }
 }
 
-trait Material {
+trait Material : Send + Sync {
     fn scatter(&self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord)
                -> Option<(Ray, Vec3)>;
     fn emitted(&self, uv : (f32, f32), p : &Vec3) -> Vec3 {
@@ -619,7 +750,7 @@ fn into_bvh(
 }
 
 
-trait Texture {
+trait Texture : Send + Sync {
     fn tex_lookup(&self, uv : (f32, f32), p : &Vec3) -> Vec3;
 }
 
@@ -687,22 +818,16 @@ impl PerlinNoise {
         };
 
         for i in 0..n {
-            pn.ranvec[i] = (2.0 * vec3(rng.gen(), rng.gen(), rng.gen())
+            pn.ranvec[i] = (2.0 * rng.gen::<Vec3>()
                             - ivec3(1, 1, 1)).unit();
             pn.perm_x[i] = i;
             pn.perm_y[i] = i;
             pn.perm_z[i] = i;
         }
 
-        for a in &mut[&mut pn.perm_x, &mut pn.perm_y, &mut pn.perm_z] {
-            for i in (0..n).rev() {
-                let j = Range::new(0, i + 1).ind_sample(rng);
-                // slow swap here, since it may well alias
-                let tmp = a[i];
-                a[i] = a[j];
-                a[j] = tmp
-            }
-        }
+        rng.shuffle(&mut pn.perm_x[..]);
+        rng.shuffle(&mut pn.perm_y[..]);
+        rng.shuffle(&mut pn.perm_z[..]);
 
         pn
     }
@@ -749,7 +874,7 @@ impl PerlinNoise {
 
 #[derive(Clone)]
 struct PerlinTexture {
-    noise : Rc<PerlinNoise>,
+    noise : Arc<PerlinNoise>,
     scale : f32,
 }
 
@@ -809,7 +934,7 @@ macro_rules! aarect {
      [$y:ident, $Y:ident],
      [$z:ident, $Z:ident]) => (
         struct $XYRect {
-            material : Rc<Material>,
+            material : Arc<Material>,
             $x : (f32, f32),
             $y : (f32, f32),
             $z : f32,
@@ -817,7 +942,7 @@ macro_rules! aarect {
 
         impl $XYRect {
             fn new(
-                $x : (f32, f32), $y : (f32, f32), $z : f32, mat : &Rc<Material>, flip : bool
+                $x : (f32, f32), $y : (f32, f32), $z : f32, mat : &Arc<Material>, flip : bool
             ) -> Box<Hitable> {
                 let r = $XYRect {$x: $x, $y: $y, $z: $z, material: mat.clone()};
                 if flip { box FlipNormals(r) } else { box r }
@@ -871,14 +996,14 @@ aarect!(XZRect, [x, X], [z, Z], [y, Y]);
 
 #[allow(dead_code)]
 fn simple_light(rng : &mut Rng) -> Box<Hitable> {
-    let noise = Rc::new(PerlinNoise::new(rng, 256));
+    let noise = Arc::new(PerlinNoise::new(rng, 256));
     let ntex = PerlinTexture {
         noise: noise,
         scale: 4.0,
     };
     let mut list : Vec<Box<Hitable>> = Vec::new();
 
-    let marble_material = Rc::new(Lambertian(ntex.clone()));
+    let marble_material = Arc::new(Lambertian(ntex.clone()));
 
     // floor
     list.push(sphere(
@@ -892,7 +1017,7 @@ fn simple_light(rng : &mut Rng) -> Box<Hitable> {
         marble_material.clone(),
     ));
 
-    let light_material = Rc::new(DiffuseLight(ConstantTex(ivec3(4, 4, 4))));
+    let light_material = Arc::new(DiffuseLight(ConstantTex(ivec3(4, 4, 4))));
 
     // sphere light
     list.push(sphere(
@@ -914,10 +1039,10 @@ fn simple_light(rng : &mut Rng) -> Box<Hitable> {
 fn cornell_box(rng : &mut Rng) -> Box<Hitable> {
     let mut list : Vec<Box<Hitable>> = Vec::new();
 
-    let red : Rc<Material> = Rc::new(Lambertian(ConstantTex(vec3(0.65, 0.05, 0.05))));
-    let white : Rc<Material> = Rc::new(Lambertian(ConstantTex(0.73 * ONE3)));
-    let green : Rc<Material> = Rc::new(Lambertian(ConstantTex(vec3(0.12, 0.45, 0.15))));
-    let light : Rc<Material> = Rc::new(DiffuseLight(ConstantTex(7.0 * ONE3)));
+    let red : Arc<Material> = Arc::new(Lambertian(ConstantTex(vec3(0.65, 0.05, 0.05))));
+    let white : Arc<Material> = Arc::new(Lambertian(ConstantTex(0.73 * ONE3)));
+    let green : Arc<Material> = Arc::new(Lambertian(ConstantTex(vec3(0.12, 0.45, 0.15))));
+    let light : Arc<Material> = Arc::new(DiffuseLight(ConstantTex(7.0 * ONE3)));
 
     list.push(YZRect::new((0.0, 555.0), (0.0, 555.0), 555.0, &green, true));
     list.push(YZRect::new((0.0, 555.0), (0.0, 555.0), 0.0, &red, false));
@@ -964,7 +1089,7 @@ impl<H : Hitable> Hitable for FlipNormals<H> {
     }
 }
 
-fn cube(p0 : Vec3, p1 : Vec3, mat : &Rc<Material>) -> Box<Hitable> {
+fn cube(p0 : Vec3, p1 : Vec3, mat : &Arc<Material>) -> Box<Hitable> {
     into_bvh_det(&mut || 0, vec![
         XYRect::new((p0[X], p1[X]), (p0[Y], p1[Y]), p1[Z], mat, false),
         XYRect::new((p0[X], p1[X]), (p0[Y], p1[Y]), p0[Z], mat, true),
@@ -1029,8 +1154,6 @@ fn rotate(axis : Vec3, angle : f32, inner : Box<Hitable>) -> Box<Rotate> {
 
     let Mat3(foo) = mat;
 
-    println!("{:?}", foo);
-
     box Rotate {
         inner: inner,
         mat: mat,
@@ -1073,13 +1196,10 @@ impl Hitable for ConstantMedium {
     fn hit(
         &self, rng : &mut Rng, r : &Ray, dist : (f32, f32)
     ) -> Option<HitRecord> {
-        let db = rng.gen::<f32>() < 0.00001;
-        let db = false;
         let mhit1 = self.boundary.hit(rng, r, (f32::MIN, f32::MAX));
         if let Some(mut hit1) = mhit1 {
             let mhit2 = self.boundary.hit(rng, r, (hit1.t + 0.0001, f32::MAX));
             if let Some(mut hit2) = mhit2 {
-                if db {println!("\nt0, t1 = {}, {}", hit1.t, hit2.t)}
                 hit1.t = hit1.t.max(dist.0);
                 hit2.t = hit2.t.min(dist.1);
                 if hit1.t >= hit2.t {
@@ -1089,12 +1209,9 @@ impl Hitable for ConstantMedium {
 
                 let dist_inside = (hit2.t - hit1.t) * r.direction.len();
                 let hit_dist = -(1.0 / self.density) * rng.gen::<f32>().ln();
-                if db {println!("hit_dist = {}", hit_dist)}
                 if hit_dist < dist_inside {
                     let t = hit1.t + hit_dist / r.direction.len();
-                    if db {println!("hit.t = {}", t)}
                     let p = r.at(t);
-                    if db {println!("hit.p = {}", p)}
                     let normal = ivec3(1, 0, 0);
                     return Some(HitRecord {
                         t: t, p: p,
@@ -1160,12 +1277,12 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
     let mut boxlist : Vec<Box<Hitable>> = Vec::new();
     let mut boxlist2 : Vec<Box<Hitable>> = Vec::new();
 
-    let white : Rc<Material> =
-        Rc::new(Lambertian(ConstantTex(0.73 * ONE3)));
-    let ground : Rc<Material> =
-        Rc::new(Lambertian(ConstantTex(vec3(0.48, 0.83, 0.53))));
-    let red : Rc<Material> =
-        Rc::new(Lambertian(ConstantTex(ivec3(1, 0, 0))));
+    let white : Arc<Material> =
+        Arc::new(Lambertian(ConstantTex(0.73 * ONE3)));
+    let ground : Arc<Material> =
+        Arc::new(Lambertian(ConstantTex(vec3(0.48, 0.83, 0.53))));
+    let red : Arc<Material> =
+        Arc::new(Lambertian(ConstantTex(ivec3(1, 0, 0))));
 
     let nb = 20;
     let gi = -5..5;
@@ -1182,10 +1299,10 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
 
             // make sure we see the caustics
 
-            if
-                i == 2 && j == 0 ||
-                i == 3 && j == 1
-            {
+            if i == 2 && j == 0 {
+                y1 = 90.0;
+            }
+            if i == 3 && j == 1 {
                 y1 = 80.0;
             }
 
@@ -1205,13 +1322,12 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
                               80.0,
                               &ground, false));
     }
-    // list.push(XZRect::new((123.0, 423.0), (147.0, 412.0), 554.0, &light, false));
     {
         let center = ivec3(273, 554, 279);
         let size = ivec3(150, 0, 132);
         let adjust = 1.0;
-        let light : Rc<Material> =
-            Rc::new(DiffuseLight(
+        let light : Arc<Material> =
+            Arc::new(DiffuseLight(
                 ConstantTex(7.0 * ONE3 / adjust / adjust)));
         let min = center - size * adjust;
         let max = center + size * adjust;
@@ -1221,17 +1337,17 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
     }
     let center = ivec3(400, 400, 200);
     list.push(moving_sphere(50.0, center, center + ivec3(30, 0, 0), 0.0, 1.0,
-                     Rc::new(Lambertian(ConstantTex(vec3(0.7, 0.3, 0.1))))));
+                     Arc::new(Lambertian(ConstantTex(vec3(0.7, 0.3, 0.1))))));
     list.push(sphere(50.0, ivec3(260, 150, 45),
-                                Rc::new(Dielectric(1.5))));
+                                Arc::new(Dielectric(1.5))));
     list.push(sphere(50.0, ivec3(0, 150, 145),
-                                Rc::new(Metal{
+                                Arc::new(Metal{
                                     albedo: vec3(0.8, 0.8, 0.9),
-                                    fuzz: 10.0,
+                                    fuzz: 1.0,
                                 })));
 
     let boundary = sphere(70.0, ivec3(360, 150, 145),
-                          Rc::new(Dielectric(1.3)));
+                          Arc::new(Dielectric(1.3)));
     list.push(boundary.clone());
     let medium_color = vec3(0.2, 0.4, 0.9);
     let iso = Isotropic(ConstantTex(medium_color));
@@ -1243,7 +1359,7 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
         phase_function: box mix,
     });
     let boundary = sphere(5000.0, ivec3(0, 0, 0),
-                                     Rc::new(Dielectric(1.5)));
+                                     Arc::new(Dielectric(1.5)));
     list.push(box ConstantMedium {
         boundary: boundary,
         density: 0.0001,
@@ -1251,24 +1367,24 @@ fn the_next_week(rng : &mut Rng) -> Box<Hitable> {
     });
 
     let img = image::open(&Path::new("earth.png")).unwrap();
-    let earth = Rc::new(Lambertian(image_texture(&img)));
+    let earth = Arc::new(Lambertian(image_texture(&img)));
     list.push(sphere(100.0, ivec3(400, 200, 400), earth));
 
-    let marble = Rc::new(Lambertian(
+    let marble = Arc::new(Lambertian(
         PerlinTexture {
-            noise: Rc::new(PerlinNoise::new(rng, 256)),
+            noise: Arc::new(PerlinNoise::new(rng, 256)),
             scale: 0.1,
         }));
     list.push(sphere(80.0, ivec3(220, 280, 300), marble));
 
     for i in 0..200 {
-        let rvec = vec3(rng.gen(), rng.gen(), rng.gen());
+        let rvec : Vec3 = rng.gen();
         let rvec = (rand_in_ball(rng).unit() + ivec3(1, 1, 1)) / 2.0;
         let center = rvec * 165.0;
         boxlist2.push(sphere(10.0, center, white.clone()));
     }
 
-    if complicated_geom {
+    if false && complicated_geom {
         list.push(translate(ivec3(-100, 270, 395),
                         // rotate(ivec3(0, 1, 0), 15.0,
                         into_bvh(rng, boxlist2, (0.0, 1.0))));
