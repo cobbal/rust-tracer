@@ -10,10 +10,10 @@
 NotebookFileLineBreakTest
 NotebookFileLineBreakTest
 NotebookDataPosition[       157,          7]
-NotebookDataLength[      4780,        148]
-NotebookOptionsPosition[      4526,        134]
-NotebookOutlinePosition[      4880,        150]
-CellTagsIndexPosition[      4837,        147]
+NotebookDataLength[      5181,        157]
+NotebookOptionsPosition[      4927,        143]
+NotebookOutlinePosition[      5281,        159]
+CellTagsIndexPosition[      5238,        156]
 WindowFrame->Normal*)
 
 (* Beginning of Notebook Content *)
@@ -23,23 +23,6 @@ Cell[BoxData[{
   RowBox[{"file", "=", 
    RowBox[{
     RowBox[{"NotebookDirectory", "[", "]"}], "<>", "\"\<raw.rgb\>\""}]}], 
-  ";"}], "\[IndentingNewLine]", 
- RowBox[{
-  RowBox[{"lumenMatrix", "=", 
-   RowBox[{"Flatten", "[", "\[IndentingNewLine]", 
-    RowBox[{
-     RowBox[{
-      RowBox[{"ColorConvert", "[", 
-       RowBox[{"#", ",", "\"\<Grayscale\>\""}], "]"}], "&"}], 
-     "\[IndentingNewLine]", "/@", 
-     RowBox[{"{", 
-      RowBox[{
-       RowBox[{"{", 
-        RowBox[{"1", ",", "0", ",", "0"}], "}"}], ",", 
-       RowBox[{"{", 
-        RowBox[{"0", ",", "1", ",", "0"}], "}"}], ",", 
-       RowBox[{"{", 
-        RowBox[{"0", ",", "0", ",", "1"}], "}"}]}], "}"}]}], "]"}]}], 
   ";"}], "\[IndentingNewLine]", 
  RowBox[{
   RowBox[{
@@ -61,6 +44,23 @@ Cell[BoxData[{
      RowBox[{"{", 
       RowBox[{
        RowBox[{"nx", "*", "ny"}], ",", "3"}], "}"}]}], "]"}]}], 
+  ";"}], "\[IndentingNewLine]", 
+ RowBox[{
+  RowBox[{"lumenMatrix", "=", 
+   RowBox[{"Flatten", "[", "\[IndentingNewLine]", 
+    RowBox[{
+     RowBox[{
+      RowBox[{"ColorConvert", "[", 
+       RowBox[{"#", ",", "\"\<Grayscale\>\""}], "]"}], "&"}], 
+     "\[IndentingNewLine]", "/@", 
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"{", 
+        RowBox[{"1", ",", "0", ",", "0"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "1", ",", "0"}], "}"}], ",", 
+       RowBox[{"{", 
+        RowBox[{"0", ",", "0", ",", "1"}], "}"}]}], "}"}]}], "]"}]}], 
   ";"}], "\[IndentingNewLine]", 
  RowBox[{
   RowBox[{"gs", "=", 
@@ -114,6 +114,12 @@ Cell[BoxData[{
    RowBox[{"GaussianFilter", "[", 
     RowBox[{"tim", ",", "5"}], "]"}]}], ";"}], "\[IndentingNewLine]", 
  RowBox[{
+  RowBox[{"Export", "[", 
+   RowBox[{
+    RowBox[{
+     RowBox[{"HomeDirectory", "[", "]"}], "<>", "\"\</Desktop/blur.png\>\""}],
+     ",", "blurred"}], "]"}], ";"}], "\[IndentingNewLine]", 
+ RowBox[{
   RowBox[{"bla", "=", 
    RowBox[{"ImageData", "[", "blurred", "]"}]}], ";"}], "\[IndentingNewLine]", 
  RowBox[{"Image", "[", 
@@ -130,7 +136,10 @@ Cell[BoxData[{
    3.672814985248069*^9}, {3.672815046078991*^9, 3.672815078426659*^9}, {
    3.672815193617526*^9, 3.672815193743864*^9}, {3.672815255557266*^9, 
    3.6728152777878523`*^9}, {3.672815321651887*^9, 3.6728154357257957`*^9}, 
-   3.6728155327005653`*^9, 3.6728169532732983`*^9}]
+   3.6728155327005653`*^9, 3.6728169532732983`*^9, {3.672817813639228*^9, 
+   3.672817817768811*^9}, {3.672818004859351*^9, 3.6728180169941797`*^9}, {
+   3.672841459023929*^9, 3.672841548982622*^9}, {3.672841789932053*^9, 
+   3.6728417936896467`*^9}}]
 },
 WindowSize->{740, 755},
 WindowMargins->{{4, Automatic}, {Automatic, 4}},
@@ -149,7 +158,7 @@ CellTagsIndex->{}
 *)
 (*NotebookFileOutline
 Notebook[{
-Cell[557, 20, 3965, 112, 335, "Input"]
+Cell[557, 20, 4366, 121, 352, "Input"]
 }
 ]
 *)
