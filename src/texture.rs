@@ -5,7 +5,7 @@ use random::*;
 use image;
 
 use std::sync::Arc;
-use std::cmp::{max, min};
+use image::math::utils::clamp;
 
 pub trait Texture : Send + Sync {
     fn tex_lookup(&self, uv : (f32, f32), p : &Vec3) -> Vec3;
@@ -170,9 +170,9 @@ impl Texture for ImageTexture {
         let ny = self.im.height();
 
         uv.1 = 1.0 - uv.1;
-        let i = min(max(0, (uv.0 * nx as f32) as i32) as u32, nx - 1);
-        let j = min(max(0, (uv.1 * ny as f32) as i32) as u32, ny - 1);
-        let pix = self.im.get_pixel(i, j);
+        let i = clamp((uv.0 * nx as f32) as i32, 0, nx as i32 - 1);
+        let j = clamp((uv.1 * ny as f32) as i32, 0, ny as i32 - 1);
+        let pix = self.im.get_pixel(i as u32, j as u32);
         vec3(pix[0] as f32 / 255.0,
              pix[1] as f32 / 255.0,
              pix[2] as f32 / 255.0)

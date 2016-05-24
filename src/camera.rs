@@ -6,7 +6,7 @@ use ray::*;
 #[derive(Clone)]
 pub struct Camera {
     origin : Vec3,
-    lower_left_corner : Vec3,
+    upper_left_corner : Vec3,
     horizontal : Vec3,
     vertical : Vec3,
     u : Vec3,
@@ -36,9 +36,9 @@ pub fn camera(
 
     return Camera {
         origin: lookfrom,
-        lower_left_corner: lookfrom
+        upper_left_corner: lookfrom
             - half_width * focus_dist * &u
-            - half_height * focus_dist * &v
+            + half_height * focus_dist * &v
             - focus_dist * &w,
         horizontal: 2.0 * half_width * focus_dist * &u,
         vertical: 2.0 * half_height * focus_dist * &v,
@@ -55,9 +55,9 @@ impl Camera {
         let rd = self.lens_radius * rand_in_disk(rng);
         let offset = &self.u * rd[X] + &self.v * rd[Y];
 
-        let dir = &self.lower_left_corner
+        let dir = &self.upper_left_corner
             + s * &self.horizontal
-            + t * &self.vertical
+            - t * &self.vertical
             - &self.origin - &offset;
         let time = self.time0 + rng.gen::<f32>() * (self.time1 - self.time0);
         return ray(&self.origin + offset, dir, time);

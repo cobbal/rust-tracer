@@ -96,7 +96,7 @@ pub fn one_weekend(rng : &mut Rng) -> RenderTask {
 }
 
 #[allow(dead_code)]
-pub fn the_next_week(rng : &mut Rng) -> Box<Object> {
+pub fn the_next_week(rng : &mut Rng) -> RenderTask {
     let mut list : Vec<Box<Object>> = Vec::new();
     let mut boxlist : Vec<Box<Object>> = Vec::new();
     let mut boxlist2 : Vec<Box<Object>> = Vec::new();
@@ -215,11 +215,33 @@ pub fn the_next_week(rng : &mut Rng) -> Box<Object> {
                         into_bvh(rng, boxlist2, (0.0, 1.0))));
     }
 
-    return into_bvh(rng, list, (0.0, 1.0));
+    let world = into_bvh(rng, list, (0.0, 1.0));
+
+    let size = (500, 500);
+
+    let lookfrom = ivec3(478, 278, -600);
+    let lookat = ivec3(278, 278, 0);
+    let dist_to_focus = 10.0;
+    let aperture = 0.0;
+    let vfov = 40.0;
+    let aspect = size.0 as f32 / size.1 as f32;
+
+    let camera = camera(lookfrom, lookat, vec3(0.0, 1.0, 0.0),
+           vfov, aspect,
+           aperture, dist_to_focus,
+           0.0, 1.0);
+
+
+    RenderTask {
+        world: world,
+        camera: camera,
+        target_size: size,
+        samples: 10000,
+    }
 }
 
 #[allow(dead_code)]
-pub fn simple_light(rng : &mut Rng) -> Box<Object> {
+pub fn simple_light(rng : &mut Rng) -> RenderTask {
     let noise = Arc::new(PerlinNoise::new(rng, 256));
     let ntex = PerlinTexture::new(rng, 4.0);
     let mut list : Vec<Box<Object>> = Vec::new();
@@ -253,11 +275,32 @@ pub fn simple_light(rng : &mut Rng) -> Box<Object> {
         material: light_material.clone()
     });
 
-    return into_bvh(rng, list, (0.0, 1.0));
+    let world = into_bvh(rng, list, (0.0, 1.0));
+
+    let size = (200, 200);
+
+    let lookfrom = ivec3(13, 2, 3);
+    let lookat = ivec3(0, 0, 0);
+    let dist_to_focus = 10.0;
+    let aperture = 0.1;
+    let vfov = 20.0;
+    let aspect = size.0 as f32 / size.1 as f32;
+
+    let camera = camera(lookfrom, lookat, ivec3(0, 1, 0),
+           vfov, aspect,
+           aperture, dist_to_focus,
+           0.0, 1.0);
+
+    RenderTask {
+        world: world,
+        camera: camera,
+        target_size: size,
+        samples: 1000,
+    }
 }
 
 #[allow(dead_code)]
-pub fn cornell_box(rng : &mut Rng) -> Box<Object> {
+pub fn cornell_box(rng : &mut Rng) -> RenderTask {
     let mut list : Vec<Box<Object>> = Vec::new();
 
     let red : Arc<Material> = Arc::new(Lambertian(ConstantTex(vec3(0.65, 0.05, 0.05))));
@@ -292,7 +335,7 @@ pub fn cornell_box(rng : &mut Rng) -> Box<Object> {
 
     let size = (500, 500);
 
-    let lookfrom = ivec3(478, 278, -600);
+    let lookfrom = ivec3(278, 278, -800);
     let lookat = ivec3(278, 278, 0);
     let dist_to_focus = 10.0;
     let aperture = 0.0;
@@ -304,5 +347,12 @@ pub fn cornell_box(rng : &mut Rng) -> Box<Object> {
            aperture, dist_to_focus,
            0.0, 1.0);
 
-    return into_bvh(rng, list, (0.0, 1.0));
+    let world = into_bvh(rng, list, (0.0, 1.0));
+
+    RenderTask {
+        world: world,
+        camera: camera,
+        target_size: size,
+        samples: 1000,
+    }
 }

@@ -35,6 +35,7 @@ extern crate image;
 extern crate rand;
 extern crate num_cpus;
 extern crate byteorder;
+extern crate num;
 
 fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
     let render_task = Arc::new(render_task);
@@ -123,7 +124,7 @@ fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
 
         if prev_samp / nsave != main_target.samples / nsave {
             main_target.write_png("trace.png");
-            main_target.write_hdr("raw.rgb");
+            // main_target.write_hdr("raw.rgb");
 
             print!("{} ", main_target.samples);
             io::stdout().flush().unwrap();
@@ -163,6 +164,7 @@ fn render_a_frame(rng : &mut Rng, task : &RenderTask, target : &mut RenderTarget
     target.samples += 1;
 }
 
+
 #[inline(never)]
 fn ray_trace(rng : &mut Rng, r0 : Ray, world : &Object) -> Vec3 {
     let mut accumulator = vec3(0.0, 0.0, 0.0);
@@ -191,8 +193,8 @@ fn ray_trace(rng : &mut Rng, r0 : Ray, world : &Object) -> Vec3 {
                                     break;
                                 }
                             }
-                            continue;
                         }
+                        continue;
                     },
                     None => {
                         break;
@@ -214,11 +216,10 @@ fn main() {
     x.hit(&r, (0.0, 1.0));
 
     let seed : RngSeed = rand::thread_rng().gen();
-    let seed = [4221229915, 2284345502, 1839295593, 2276192001];
     println!("let seed = {:?};", seed);
     let mut rng : Rng = Rng::from_seed(seed);
 
-    let task = one_weekend(&mut rng);
+    let task = the_next_week(&mut rng);
 
     render_overlord(&mut rng, task);
 }
