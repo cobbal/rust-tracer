@@ -31,8 +31,6 @@ use std::sync::mpsc::{channel, sync_channel, Sender};
 use std::io;
 use std::io::{Write};
 
-use std::fs;
-
 extern crate image;
 extern crate rand;
 extern crate num_cpus;
@@ -40,14 +38,6 @@ extern crate byteorder;
 extern crate num;
 
 fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
-
-    std::mem::drop(fs::OpenOptions::new()
-                   .write(true)
-                   .truncate(true)
-                   .create(true)
-                   .open("foo.txt")
-                   .unwrap());
-
     let render_task = Arc::new(render_task);
     let (nx, ny) = render_task.target_size;
     let mut main_target = RenderTarget::new(render_task.target_size);
@@ -232,7 +222,7 @@ fn main() {
     println!("let seed = {:?};", seed);
     let mut rng : Rng = Rng::from_seed(seed);
 
-    let task = two_spheres(&mut rng);
+    let task = cornell_box(&mut rng);
 
     render_overlord(&mut rng, task);
 }

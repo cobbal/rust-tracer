@@ -15,7 +15,7 @@ use std::cmp::{max, min, Ordering};
 pub struct HitRecord<'a> {
     pub t : f32,
     pub p : Vec3,
-    pub normal : Vec3,
+    pub normal : Vec3, // should be unit
     pub material : &'a Material,
     pub uv : (f32, f32),
 }
@@ -383,9 +383,8 @@ impl Object for Rotate {
         r.origin = self.inv * r.origin;
         r.direction = self.inv * r.direction;
         self.inner.hit(rng, &r, dist).map(|mut hit| {
-            let inv = self.mat.transpose();
-            hit.p = inv * hit.p;
-            hit.normal = inv * hit.normal;
+            hit.p = self.mat * hit.p;
+            hit.normal = self.mat * hit.normal;
             hit
         })
     }
@@ -473,7 +472,7 @@ impl Object for Sky {
             Some(HitRecord {
                 t: f32::INFINITY,
                 p: dir * f32::INFINITY,
-                normal: dir,
+                normal: dir.unit(),
                 material: self,
                 uv: (0.0, (1.0 + dir.unit()[Y]) / 2.0),
             })
