@@ -49,7 +49,6 @@ pub fn camera(
     };
 }
 
-
 impl Camera {
     pub fn get_ray(&self, rng : &mut Rng, s : f32, t : f32) -> Ray {
         let rd = self.lens_radius * rand_in_disk(rng);
@@ -61,5 +60,48 @@ impl Camera {
             - &self.origin - &offset;
         let time = self.time0 + rng.gen::<f32>() * (self.time1 - self.time0);
         return ray(&self.origin + offset, dir, time);
+    }
+}
+
+pub struct CameraSetup {
+    origin : Vec3,
+    lookat : Vec3,
+    vup : Vec3,
+    vfov : f32,
+    aspect : f32,
+    aperture : f32,
+    focus_dist : f32,
+    time0 : f32,
+    time1 : f32,
+}
+
+pub fn camera_setup(origin : Vec3) -> CameraSetup {
+    CameraSetup {
+        origin: origin,
+        lookat: ZERO3,
+        vup: ivec3(0, 1, 0),
+        vfov: 20.0,
+        aspect: 1.0,
+        aperture: 0.0,
+        focus_dist: origin.len(),
+        time0: 0.0,
+        time1: 1.0,
+    }
+}
+
+#[allow(dead_code)]
+impl CameraSetup {
+    pub fn look_at(mut self, v : Vec3) -> Self {self.lookat = v; self}
+    pub fn up(mut self, v : Vec3) -> Self {self.vup = v; self}
+    pub fn vfov(mut self, f : f32) -> Self {self.vfov = f; self}
+    pub fn aspect(mut self, (x, y) : (u32, u32)) -> Self {self.aspect = x as f32 / y as f32; self}
+    pub fn aperture(mut self, f : f32) -> Self {self.aperture = f; self}
+    pub fn focus_dist(mut self, f : f32) -> Self {self.focus_dist = f; self}
+    pub fn time(mut self, t0 : f32, t1 : f32) -> Self {self.time0 = t0; self.time1 = t1; self}
+
+    pub fn to_camera(self) -> Camera {
+        camera(self.origin, self.lookat, self.vup,
+               self.vfov, self.aspect, self.aperture, self.focus_dist,
+               self.time0, self.time1)
     }
 }

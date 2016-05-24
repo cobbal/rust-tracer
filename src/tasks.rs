@@ -73,7 +73,7 @@ pub fn one_weekend(rng : &mut Rng) -> RenderTask {
     list.push(box Sky);
 
     let world = into_bvh(rng, list, (0.0, 1.0));
-    let size = (200, 200);
+    let size = (500, 500);
 
     let lookfrom = ivec3(13, 2, 3);
     let lookat = ivec3(0, 0, 0);
@@ -301,7 +301,7 @@ pub fn simple_light(rng : &mut Rng) -> RenderTask {
 
 #[allow(dead_code)]
 pub fn cornell_box(rng : &mut Rng) -> RenderTask {
-    let mut list : Vec<Box<Object>> = Vec::new();
+    let mut list : Vec<Box<Object>> = vec![];
 
     let red : Arc<Material> = Arc::new(Lambertian(ConstantTex(vec3(0.65, 0.05, 0.05))));
     let white : Arc<Material> = Arc::new(Lambertian(ConstantTex(0.73 * ONE3)));
@@ -315,37 +315,38 @@ pub fn cornell_box(rng : &mut Rng) -> RenderTask {
     list.push(XZRect::new((0.0, 555.0), (0.0, 555.0), 0.0, &white, false));
     list.push(XYRect::new((0.0, 555.0), (0.0, 555.0), 555.0, &white, true));
 
-    let b1 = translate(ivec3(130, 0, 65),
-                       rotate(ivec3(0, 1, 0), -18.0,
-                              cube(ivec3(0, 0, 0), ivec3(165, 165, 165), &white)));
-    let b2 = translate(ivec3(265, 0, 295),
-                       rotate(ivec3(0, 1, 0), 15.0,
-                              cube(ivec3(0, 0, 0), ivec3(165, 330, 165), &white)));
+    let b1 = cube(ivec3(0, 0, 0), ivec3(165, 165, 165), &white);
+    let b2 = cube(ivec3(0, 0, 0), ivec3(165, 330, 165), &white);
 
-    list.push(box ConstantMedium {
+    let mist1 = box ConstantMedium {
         boundary: b1,
         density: 0.01,
         phase_function: box Isotropic(ConstantTex(ivec3(1, 1, 1))),
-    });
-    list.push(box ConstantMedium {
+    };
+    let mist2 = box ConstantMedium {
         boundary: b2,
         density: 0.01,
         phase_function: box Isotropic(ConstantTex(ivec3(0, 0, 0))),
-    });
+    };
+
+    let xmist1 = translate(ivec3(130, 0, 65),
+                           rotate(ivec3(0, 1, 0), -18.0,
+                                  mist1));
+    let xmist2 = translate(ivec3(265, 0, 295),
+                           rotate(ivec3(0, 1, 0), 12.0,
+                                  mist2));
+
+    list.push(xmist1);
+    list.push(xmist2);
 
     let size = (500, 500);
 
-    let lookfrom = ivec3(278, 278, -800);
-    let lookat = ivec3(278, 278, 0);
-    let dist_to_focus = 10.0;
-    let aperture = 0.0;
-    let vfov = 40.0;
-    let aspect = size.0 as f32 / size.1 as f32;
-
-    let camera = camera(lookfrom, lookat, vec3(0.0, 1.0, 0.0),
-           vfov, aspect,
-           aperture, dist_to_focus,
-           0.0, 1.0);
+    let camera = camera_setup(ivec3(278, 278, -800))
+        .look_at(ivec3(278, 278, 0))
+        .focus_dist(10.0)
+        .vfov(40.0)
+        .aspect(size)
+        .to_camera();
 
     let world = into_bvh(rng, list, (0.0, 1.0));
 
@@ -353,6 +354,52 @@ pub fn cornell_box(rng : &mut Rng) -> RenderTask {
         world: world,
         camera: camera,
         target_size: size,
+        samples: 1000,
+    }
+}
+
+#[allow(dead_code)]
+pub fn two_spheres(rng : &mut Rng) -> RenderTask {
+    let mut list : Vec<Box<Object>> = vec![];
+
+    let chexture = Arc::new(Lambertian(CheckerTex {
+        even: ConstantTex(vec3(0.2, 0.3, 0.1)),
+        odd: ConstantTex(vec3(0.9, 0.9, 0.9)),
+    }));
+
+    list.push(sphere(10.0, ivec3(0, -10, 0), chexture.clone()));
+    list.push(sphere(10.0, ivec3(0, 10, 0), chexture.clone()));
+    list.push(box Sky);
+
+    let size = (200, 100);
+    RenderTask {
+        world: into_bvh(rng, list, (0.0, 1.0)),
+        camera: camera_setup(ivec3(13, 2, 3))
+            .aspect(size)
+           .to_camera(),
+        target_size: size,
+        samples: 1000,
+    }
+}
+
+#[allow(dead_code)]
+pub fn lambertian_test(rng : &mut Rng, angle : f32) -> RenderTask {
+    let mut list : Vec<Box<Object>> = vec![];
+
+    let light : Arc<Material> = Arc::new(DiffuseLight(ConstantTex(5.0 * ONE3)));
+    let red : Arc<Material> = Arc::new(Lambertian(ConstantTex(vec3(0.9, 0.3, 0.3))));
+
+    list.push(sphere(1.0, ivec3(0, 0, 10), light));
+    list.push(XYRect::new((-1.0, 1.0), (-1.0, 1.0), 0.0, &red, false));
+
+    RenderTask {
+        world: into_bvh(rng, list, (0.0, 1.0)),
+        camera: camera_setup(
+            9.0 * vec3(0.0,
+                       angle.to_radians().sin(),
+                       angle.to_radians().cos()))
+            .to_camera(),
+        target_size: (500, 500),
         samples: 1000,
     }
 }

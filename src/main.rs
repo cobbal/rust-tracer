@@ -29,7 +29,9 @@ use std::sync::Arc;
 use std::thread;
 use std::sync::mpsc::{channel, sync_channel, Sender};
 use std::io;
-use std::io::Write;
+use std::io::{Write};
+
+use std::fs;
 
 extern crate image;
 extern crate rand;
@@ -38,6 +40,14 @@ extern crate byteorder;
 extern crate num;
 
 fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
+
+    std::mem::drop(fs::OpenOptions::new()
+                   .write(true)
+                   .truncate(true)
+                   .create(true)
+                   .open("foo.txt")
+                   .unwrap());
+
     let render_task = Arc::new(render_task);
     let (nx, ny) = render_task.target_size;
     let mut main_target = RenderTarget::new(render_task.target_size);
@@ -53,6 +63,7 @@ fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
     };
 
     let nworkers = num_cpus::get();
+    // let nworkers = 1;
     println!("running with {} threads", nworkers);
 
     let (task_tx, task_rx) = sync_channel::<(usize, RenderTarget)>(0);
@@ -156,6 +167,7 @@ fn render_a_frame(rng : &mut Rng, task : &RenderTask, target : &mut RenderTarget
             let r = task.camera.get_ray(rng, u, v);
 
             let col = ray_trace(rng, r, &*task.world);
+
             for i in 0..3 {
                 target[(x, y)][i] += col[i] as f64;
             }
@@ -171,7 +183,7 @@ fn ray_trace(rng : &mut Rng, r0 : Ray, world : &Object) -> Vec3 {
     let mut attenuation = vec3(1.0, 1.0, 1.0);
     let mut r = r0;
     let max_ttl = 50;
-    for ttl in 0..max_ttl {
+    for bounce in 0..max_ttl {
         match world.hit(rng, &r, (0.001, f32::INFINITY)) {
             Some(hit) => {
                 let emitted = hit.material.emitted(hit.uv, &hit.p);
@@ -207,6 +219,7 @@ fn ray_trace(rng : &mut Rng, r0 : Ray, world : &Object) -> Vec3 {
         }
         panic!()
     }
+
     return accumulator;
 }
 
@@ -219,7 +232,7 @@ fn main() {
     println!("let seed = {:?};", seed);
     let mut rng : Rng = Rng::from_seed(seed);
 
-    let task = the_next_week(&mut rng);
+    let task = two_spheres(&mut rng);
 
     render_overlord(&mut rng, task);
 }

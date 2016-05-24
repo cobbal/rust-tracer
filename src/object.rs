@@ -1,6 +1,7 @@
 use vec3::*;
 use mat3::*;
 use vec3::Vec3Index::*;
+use texture;
 use material::*;
 use random::*;
 use ray::*;
@@ -105,15 +106,14 @@ impl Object for Sphere {
 }
 
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct AABB {
     pub min : Vec3,
     pub max : Vec3,
 }
 
 impl AABB {
-    #[inline(never)]
-    pub fn hit(self, r : &Ray, dist : (f32, f32)) -> bool {
+    pub fn hit(&self, r : &Ray, dist : (f32, f32)) -> bool {
         for d in 0..3 {
             let mut t0 = (self.min[d] - r.origin[d]) / r.direction[d];
             let mut t1 = (self.max[d] - r.origin[d]) / r.direction[d];
@@ -127,6 +127,11 @@ impl AABB {
             }
         }
         return true;
+    }
+
+    #[allow(dead_code)]
+    pub fn mm_debug(&self) -> String {
+        format!("Cuboid[{}, {}]", self.min, self.max)
     }
 
     pub fn union(&self, other : &AABB) -> AABB {
@@ -315,11 +320,14 @@ impl Object for Translate {
 pub struct Rotate {
     pub inner : Box<Object>,
     pub mat : Mat3,
+    pub inv : Mat3,
+    aabb : AABB,
+    debug_object : Box<Object>,
 }
 
 pub fn rotate(axis : Vec3, angle : f32, inner : Box<Object>) -> Box<Rotate> {
-    let ct = (-angle).to_radians().cos();
-    let st = (-angle).to_radians().sin();
+    let ct = angle.to_radians().cos();
+    let st = angle.to_radians().sin();
     let u = axis.unit();
     let tensor_matrix = Mat3([
         u[X] * u[X], u[X] * u[Y], u[X] * u[Z],
@@ -334,19 +342,46 @@ pub fn rotate(axis : Vec3, angle : f32, inner : Box<Object>) -> Box<Rotate> {
 
     let mat = MAT_IDENT3 * ct + cross_matrix * st + tensor_matrix * (1.0 - ct);
 
-    let Mat3(foo) = mat;
+    let inner_box = inner.bounding_box((0.0, 1.0));
+    let mut aabb = AABB {
+        min: f32::INFINITY * ONE3,
+        max: -f32::INFINITY * ONE3,
+    };
+    for x in &[inner_box.min[X], inner_box.max[X]] {
+        for y in &[inner_box.min[Y], inner_box.max[Y]] {
+            for z in &[inner_box.min[Z], inner_box.max[Z]] {
+                let xyz = mat * vec3(*x, *y, *z);
+                for e in 0..3 {
+                    aabb.min[e] = aabb.min[e].min(xyz[e]);
+                    aabb.max[e] = aabb.max[e].max(xyz[e]);
+                }
+            }
+        }
+    }
+
+    let matter : Arc<Material> =
+        Arc::new(Lambertian(texture::ConstantTex(ivec3(0, 1, 1))));
 
     box Rotate {
         inner: inner,
         mat: mat,
+        inv: mat.transpose(),
+        aabb: aabb,
+        debug_object: cube(aabb.min, aabb.max, &matter),
     }
 }
 
 impl Object for Rotate {
     fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+        if false {
+            if rng.gen::<f32>() > 0.8 {
+                return self.debug_object.hit(rng, r, dist);
+            }
+        }
+
         let mut r = (*r).clone();
-        r.origin = self.mat * r.origin;
-        r.direction = self.mat * r.direction;
+        r.origin = self.inv * r.origin;
+        r.direction = self.inv * r.direction;
         self.inner.hit(rng, &r, dist).map(|mut hit| {
             let inv = self.mat.transpose();
             hit.p = inv * hit.p;
@@ -356,15 +391,7 @@ impl Object for Rotate {
     }
 
     fn bounding_box(&self, time : (f32, f32)) -> AABB {
-        let mut b = self.inner.bounding_box(time);
-        b.min = self.mat * b.min;
-        b.max = self.mat * b.max;
-        for i in 0..3 {
-            if b.max[i] < b.min[i] {
-                std::mem::swap(&mut b.max[i], &mut b.min[i]);
-            }
-        }
-        b
+        self.aabb
     }
 }
 
