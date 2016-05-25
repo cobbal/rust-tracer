@@ -4,6 +4,8 @@ use object::*;
 use vec3::*;
 use texture::*;
 
+use std::f32::consts::PI;
+
 pub trait Material : Send + Sync {
     fn scatter(&self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord)
                -> Option<(Ray, Vec3)>;
@@ -19,11 +21,24 @@ impl<T : Texture> Material for Lambertian<T> {
         &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
     ) -> Option<(Ray, Vec3)> {
         let Lambertian(ref albedo) = *self;
+
         let target = hit.p + hit.normal + rand_in_ball(rng);
         let direction = target - hit.p;
+        let factor = 1.0;
+
+        let mut direction = rand_in_ball(rng).unit();
+        let mut costheta = dot(direction, hit.normal);
+        if costheta < 0.0 {
+            costheta = -costheta;
+            direction = direction * -1.0;
+        }
+
+        let pdf = 0.5 / PI;
+        let scatter_pdf = costheta * costheta / (2.0 * PI / 3.0);
+        let factor = scatter_pdf / pdf;
 
         return Some((ray(hit.p, direction, r_in.time),
-                     albedo.tex_lookup(hit.uv, &hit.p)));
+                     factor * albedo.tex_lookup(hit.uv, &hit.p)));
     }
 }
 
