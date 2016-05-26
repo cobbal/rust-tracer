@@ -47,10 +47,6 @@ impl RenderTarget {
                     col[e] = col[e].sqrt();
                 }
 
-                // col[0] = clamp(col[0] / ns as f64, 0.0, 1.0).sqrt();
-                // col[1] = clamp(col[1] / ns as f64, 0.0, 1.0).sqrt();
-                // col[2] = clamp(col[2] / ns as f64, 0.0, 1.0).sqrt();
-
                 let ir = (255.99 * col[0]) as u8;
                 let ig = (255.99 * col[1]) as u8;
                 let ib = (255.99 * col[2]) as u8;

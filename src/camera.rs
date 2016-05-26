@@ -31,8 +31,8 @@ pub fn camera(
     let half_width = aspect * half_height;
 
     let w = (&lookfrom - &lookat).unit();
-    let u = cross(&vup, &w).unit();
-    let v = cross(&w, &u);
+    let u = cross(vup, w).unit();
+    let v = cross(w, u);
 
     return Camera {
         origin: lookfrom,

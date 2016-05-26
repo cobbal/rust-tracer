@@ -1,6 +1,8 @@
 use std::ops::*;
+use std::fmt;
 
 use vec3::*;
+use vec3::Vec3Index::*;
 
 #[derive(Copy, Clone)]
 pub struct Mat3(pub [f32; 9]);
@@ -14,6 +16,16 @@ impl Mat3 {
             }
         }
         result
+    }
+}
+
+impl fmt::Display for Mat3 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let &Mat3(d) = self;
+        try!(write!(f, "{{{{{}, {}, {}}},\n", d[0], d[1], d[2]));
+        try!(write!(f, " {{{}, {}, {}}},\n", d[3], d[4], d[5]));
+        try!(write!(f, " {{{}, {}, {}}}}}", d[6], d[7], d[8]));
+        Ok(())
     }
 }
 
@@ -92,4 +104,21 @@ impl Add<Mat3> for Mat3 {
         }
         res
     }
+}
+
+pub fn onb_from_w(n : Vec3) -> Mat3 {
+    let w = n.unit();
+    let a = if w[X].abs() > 0.9 {
+        ivec3(0, 1, 0)
+    } else {
+        ivec3(1, 0, 0)
+    };
+    let v = cross(w, a).unit();
+    let u = cross(v, w);
+
+    Mat3([
+        u[X], v[X], w[X],
+        u[Y], v[Y], w[Y],
+        u[Z], v[Z], w[Z],
+    ])
 }

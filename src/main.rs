@@ -222,6 +222,11 @@ fn main() {
     println!("let seed = {:?};", seed);
     let mut rng : Rng = Rng::from_seed(seed);
 
+    let m = mat3::onb_from_w(ivec3(-1, 0, 0));
+    println!("{}", m);
+
+    // return;
+
     let task = cornell_box(&mut rng);
 
     render_overlord(&mut rng, task);

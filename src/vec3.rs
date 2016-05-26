@@ -14,7 +14,6 @@ impl fmt::Display for Vec3 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{{{}, {}, {}}}", self.x, self.y, self.z)
     }
-
 }
 
 pub fn vec3(x : f32, y : f32, z : f32) -> Vec3 {
@@ -33,7 +32,7 @@ pub fn dot(a : Vec3, b : Vec3) -> f32 {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-pub fn cross<'a>(a : &'a Vec3, b : &'a Vec3) -> Vec3 {
+pub fn cross(a : Vec3, b : Vec3) -> Vec3 {
     return vec3(a.y * b.z - a.z * b.y,
                 a.z * b.x - a.x * b.z,
                 a.x * b.y - a.y * b.x);

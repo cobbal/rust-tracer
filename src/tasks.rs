@@ -309,7 +309,6 @@ impl CornellBox {
             Arc::new(DiffuseLight(ConstantTex(light_brightness * ONE3)));
         let min = center - size;
         let max = center + size;
-        println!("{:?}\n{:?}", min, max);
 
         let red : Arc<Material> = Arc::new(Lambertian(ConstantTex(vec3(0.65, 0.05, 0.05))));
         let white : Arc<Material> = Arc::new(Lambertian(ConstantTex(0.73 * ONE3)));

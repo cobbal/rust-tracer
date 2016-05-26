@@ -3,6 +3,7 @@ use ray::*;
 use object::*;
 use vec3::*;
 use texture::*;
+use mat3::*;
 
 use std::f32::consts::PI;
 
@@ -16,6 +17,16 @@ pub trait Material : Send + Sync {
 
 pub struct Lambertian<T : Texture>(pub T);
 
+pub fn random_cosine_direction(rng : &mut Rng) -> Vec3 {
+    let r1 : f32 = rng.gen();
+    let r2 : f32 = rng.gen();
+    let z = (1.0 - r2).sqrt();
+    let phi = 2.0 * PI * r1;
+    let x = phi.cos() * r2.sqrt();
+    let y = phi.sin() * r2.sqrt();
+    vec3(x, y, z)
+}
+
 impl<T : Texture> Material for Lambertian<T> {
     fn scatter(
         &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
@@ -26,15 +37,21 @@ impl<T : Texture> Material for Lambertian<T> {
         let direction = target - hit.p;
         let factor = 1.0;
 
-        let mut direction = rand_in_ball(rng).unit();
-        let mut costheta = dot(direction, hit.normal);
-        if costheta < 0.0 {
-            costheta = -costheta;
-            direction = direction * -1.0;
-        }
+        let w = hit.normal;
+        let uvw = onb_from_w(w);
+        let direction = uvw * random_cosine_direction(rng);
+        let pdf = dot(w, direction) / PI;
 
-        let pdf = 0.5 / PI;
-        let scatter_pdf = costheta * costheta / (2.0 * PI / 3.0);
+        // let mut direction = rand_in_ball(rng).unit();
+        // let mut costheta = dot(direction, hit.normal);
+        // if costheta < 0.0 {
+        //     costheta = -costheta;
+        //     direction = direction * -1.0;
+        // }
+        // let pdf = 0.5 / PI;
+
+
+        let scatter_pdf = dot(hit.normal, direction).max(0.0) / PI;
         let factor = scatter_pdf / pdf;
 
         return Some((ray(hit.p, direction, r_in.time),
