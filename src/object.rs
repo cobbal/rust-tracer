@@ -25,6 +25,11 @@ pub trait Object : Sync + Send {
     fn bounding_box(&self, time : (f32, f32)) -> AABB;
 }
 
+pub trait Emitter : Sync + Send {
+    fn emitting_surface_area(&self) -> f32;
+    fn sample_emission(&self, rng : &mut Rng) -> Ray;
+}
+
 #[derive(Clone)]
 pub struct Sphere {
     pub material : Arc<Material>,
@@ -102,6 +107,15 @@ impl Object for Sphere {
             min: self.center0 - vec3(r, r, r),
             max: self.center0 + vec3(r, r, r),
         };
+    }
+}
+
+impl Emitter for Sphere {
+    fn emitting_surface_area(&self) -> f32 {
+
+    }
+
+    fn sample_emission(&self, rng : &mut Rng) -> Ray {
     }
 }
 
@@ -460,44 +474,44 @@ aarect!(XYRect, [x, X], [y, Y], [z, Z]);
 aarect!(YZRect, [y, Y], [z, Z], [x, X]);
 aarect!(XZRect, [x, X], [z, Z], [y, Y]);
 
-pub struct Sky;
+// pub struct Sky;
 
-impl Object for Sky {
-    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
-        if dist.1 < f32::INFINITY {
-            None
-        } else {
-            // we play fast and loose with floating point, because we are madmen
-            let dir = r.direction;
-            Some(HitRecord {
-                t: f32::INFINITY,
-                p: dir * f32::INFINITY,
-                normal: dir.unit(),
-                material: self,
-                uv: (0.0, (1.0 + dir.unit()[Y]) / 2.0),
-            })
-        }
-    }
+// impl Object for Sky {
+//     fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+//         if dist.1 < f32::INFINITY {
+//             None
+//         } else {
+//             // we play fast and loose with floating point, because we are madmen
+//             let dir = r.direction;
+//             Some(HitRecord {
+//                 t: f32::INFINITY,
+//                 p: dir * f32::INFINITY,
+//                 normal: dir.unit(),
+//                 material: self,
+//                 uv: (0.0, (1.0 + dir.unit()[Y]) / 2.0),
+//             })
+//         }
+//     }
 
-    fn bounding_box(&self, time : (f32, f32)) -> AABB {
-        return AABB {
-            min: -f32::INFINITY * ONE3,
-            max: f32::INFINITY * ONE3,
-        }
-    }
-}
+//     fn bounding_box(&self, time : (f32, f32)) -> AABB {
+//         return AABB {
+//             min: -f32::INFINITY * ONE3,
+//             max: f32::INFINITY * ONE3,
+//         }
+//     }
+// }
 
-//eh, why not?
-impl Material for Sky {
-    fn scatter(
-        &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
-    ) -> Option<(Ray, Vec3)> {
-        None
-    }
+// //eh, why not?
+// impl Material for Sky {
+//     fn scatter(
+//         &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
+//     ) -> Option<(Ray, Vec3)> {
+//         None
+//     }
 
-    fn emitted(&self, (u, v) : (f32, f32), p : &Vec3) -> Vec3 {
-        let t = 0.5 + v;
-        (1.0 - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0)
-    }
+//     fn emitted(&self, (u, v) : (f32, f32), p : &Vec3) -> Vec3 {
+//         let t = 0.5 + v;
+//         (1.0 - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0)
+//     }
 
-}
+// }

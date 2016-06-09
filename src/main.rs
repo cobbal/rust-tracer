@@ -3,9 +3,12 @@
 #![feature(box_patterns)]
 #![feature(const_fn)]
 #![feature(custom_derive)]
+#![feature(associated_type_defaults)]
 #![allow(unused_variables)]
+#![allow(dead_code)]
 
 mod camera;
+mod distribution;
 mod mat3;
 mod material;
 mod object;
@@ -23,6 +26,8 @@ use ray::*;
 use render_target::*;
 use tasks::*;
 use vec3::*;
+use vec3::Vec3Index::*;
+use distribution::*;
 
 use std::f32;
 use std::sync::Arc;
@@ -176,26 +181,56 @@ fn ray_trace(rng : &mut Rng, r0 : Ray, world : &Object) -> Vec3 {
     for bounce in 0..max_ttl {
         match world.hit(rng, &r, (0.001, f32::INFINITY)) {
             Some(hit) => {
-                let emitted = hit.material.emitted(hit.uv, &hit.p);
+                let emitted = hit.material.emitted(&r, &hit);
                 accumulator += emitted * attenuation;
                 match hit.material.scatter(rng, &r, &hit) {
-                    Some((scattered, local_att)) => {
-                        r = scattered;
+                    Some(mut scatter) => {
+
+                        // let min = ivec3(213, 554, 227);
+                        // let max = ivec3(343, 554, 332);
+
+                        // let interp = vec3(rng.gen(), rng.gen(), rng.gen());
+
+                        // let on_light = (ONE3 - interp) * min + interp * max;
+                        // let mut to_light = on_light - hit.p;
+                        // let dist_squared = dot(to_light, to_light);
+                        // to_light = to_light.unit();
+                        // if dot(to_light, hit.normal) < 0.0 {
+                        //     break;
+                        // }
+                        // let light_area = (max[X] - min[X]) * (max[Z] - min[Z]);
+                        // let light_cosine = to_light[Y].abs();
+                        // if light_cosine < 0.000001 {
+                        //     break;
+                        // }
+                        // let pdf = dist_squared / (light_cosine * light_area);
+                        // scatter.r_out.direction = to_light;
+
+                        let p = CosineDist::new(hit.normal);
+                        scatter.r_out.direction = p.sample(rng);
+                        let pdf = p.pdf(&scatter.r_out.direction);
+
+                        let local_att = scatter.alb
+                            * hit.material.scatter_pdf(&r, &hit, &scatter.r_out)
+                            / pdf;
+
+
+                        r = scatter.r_out;
                         attenuation *= local_att;
-                        if false {
-                            let thresh = 0.25;
-                            if
-                                attenuation[R] < thresh &&
-                                attenuation[G] < thresh &&
-                                attenuation[B] < thresh
-                            {
-                                if rng.gen::<f32>() < thresh {
-                                    attenuation = attenuation / thresh;
-                                } else {
-                                    break;
-                                }
-                            }
-                        }
+                        // if false {
+                        //     let thresh = 0.25;
+                        //     if
+                        //         attenuation[R] < thresh &&
+                        //         attenuation[G] < thresh &&
+                        //         attenuation[B] < thresh
+                        //     {
+                        //         if rng.gen::<f32>() < thresh {
+                        //             attenuation = attenuation / thresh;
+                        //         } else {
+                        //             break;
+                        //         }
+                        //     }
+                        // }
                         continue;
                     },
                     None => {
