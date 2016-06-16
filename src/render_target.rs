@@ -30,7 +30,7 @@ impl RenderTarget {
     }
 
     #[allow(dead_code)]
-    pub fn write_png(&mut self, filename : &str) {
+    pub fn write_png(&mut self, filename : &str, do_a_bloom : bool) {
         let (nx, ny) = self.size;
         let ns = self.samples;
         let mut img = image::DynamicImage::new_rgb8(nx, ny);
@@ -42,7 +42,9 @@ impl RenderTarget {
 
                 for e in 0..3 {
                     col[e] /= ns as f64;
-                    col[e] += bloom.get_pixel(x, y).data[0] as f64;
+                    if do_a_bloom {
+                        col[e] += bloom.get_pixel(x, y).data[0] as f64;
+                    }
                     col[e] = clamp(col[e], 0.0, 1.0);
                     col[e] = col[e].sqrt();
                 }

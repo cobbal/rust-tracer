@@ -1,31 +1,27 @@
-use random::*;
 use ray::*;
 use object::*;
-use vec3::*;
 use texture::*;
-use mat3::*;
 use distribution::*;
+use utils::*;
 
 use std::sync::Arc;
 use std::f32::consts::PI;
 
-pub struct Scatter {
-    pub r_out : Ray,
+pub struct ScatterMeas {
     pub alb : Vec3,
-    pub liklihood : f32,
+    pub origin : Vec3,
+    pub out_dir : Box<Meas<Vec3>>,
 }
 
-pub struct Emission {
-    pub r_out : Ray,
-    pub color : Vec3,
-    pub liklihood : f32,
+pub enum MaterialInteraction {
+    Scatter(ScatterMeas),
+    Emit(Color),
 }
 
 pub trait Material : Send + Sync {
-    fn scatter_meas(&self, r_in : &Ray, hit : &HitRecord) -> Box<Meas<Scatter>>;
-    fn emission_meas(&self) -> Box<Meas<Emission>> {
-        box MZero
-    }
+    fn scatter(&self, r_in : &Ray, hit : &HitRecord) -> Option<ScatterMeas>;
+    fn radiosity(&self) -> Option<Vec3> { None }
+    fn emit(&self, normal : Vec3) -> Option<Box<Meas<Vec3>>> { None }
 }
 
 pub struct Lambertian<T : Texture>(pub T);
@@ -35,64 +31,39 @@ impl<T : Texture> Lambertian<T> {
         let cosine = dot(hit.normal, scattered.direction.unit());
         cosine.max(0.0) / PI
     }
+}
 
+impl<T : Texture> Material for Lambertian<T> {
     fn scatter(
-        &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
-    ) -> Option<Scatter> {
-        let Lambertian(ref albedo) = *self;
+        &self, r_in : &Ray, hit : &HitRecord
+    ) -> Option<ScatterMeas> {
 
-        let w = hit.normal;
-        let uvw = onb_from_w(w);
-        let direction = uvw * random_cosine_direction(rng);
-        let pdf = dot(w, direction) / PI;
-
-        // let mut direction = rand_in_ball(rng).unit();
-        // let mut costheta = dot(direction, hit.normal);
-        // if costheta < 0.0 {
-        //     costheta = -costheta;
-        //     direction = direction * -1.0;
-        // }
-        // let pdf = 0.5 / PI;
-
-
-        let scatter_pdf = dot(hit.normal, direction).max(0.0) / PI;
-        let factor = scatter_pdf / pdf;
-
-        return Some(Scatter {
-            r_out: ray(hit.p, direction, r_in.time),
-            alb: albedo.tex_lookup(hit.uv, &hit.p),
-            liklihood: pdf,
+        return Some(ScatterMeas {
+            alb: self.0.tex_lookup(hit.uv, &hit.p),
+            origin: hit.p,
+            out_dir: box CosineDist::new(hit.normal),
         });
     }
 }
 
-struct LambertianScatterMeas {
-    normal : Vec3,
-}
+// struct LambertianScatterMeas {
+//     normal : Vec3,
+// }
 
-impl Meas<Scatter> for LambertianScatterMeas {
-    fn pdf(&self, scatter : &Scatter) -> f32 {
-        let cosine = dot(self.normal, scatter.r_out.direction.unit());
-        cosine.max(0.0) / PI
-    }
+// mimpl!{[] Meas[Vec3] for LambertianScatterMeas {
+//     total_mass(&self) { 1.0 }
 
-    fn sample(&self, rng : &mut Rng) -> Scatter {
-        let w = self.normal;
-        let uvw = onb_from_w(w);
-        let direction = uvw * random_cosine_direction(rng);
-        let pdf = dot(w, direction) / PI;
-    }
-}
+//     sample(&self, rng) {
+//         let w = self.normal;
+//         let uvw = onb_from_w(w);
+//         Weighted(uvw * random_cosine_direction(rng), 1.0)
+//     }
 
-impl<T : Texture> Material for Lambertian<T> {
-    fn scatter_meas(
-        &self, r_in : &Ray, hit : &HitRecord
-    ) -> Box<Meas<Scatter>> {
-        box LambertianScatterMeas {
-            normal: hit.normal,
-        }
-    }
-}
+//     pdf(&self, x) {
+//         let cosine = dot(self.normal, x.unit());
+//         cosine.max(0.0) / PI
+//     }
+// }}
 
 // pub struct Metal {
 //     pub albedo : Vec3,
@@ -152,30 +123,19 @@ impl<T : Texture> Material for Lambertian<T> {
 //     }
 // }
 
-pub struct DiffuseLight<T : Texture>(pub Arc<T>);
+pub struct DiffuseLight<T>(pub Arc<T>);
 
-struct DLEMeas<T : Texture>(Arc<T>);
-
-impl<T : Texture> Meas<Emission> for DLEMeas<T> {
-    fn pdf(&self, scatter : &Emission) -> f32 {
+impl Material for DiffuseLight<Vec3> {
+    fn scatter(&self, r_in : &Ray, hit : &HitRecord) -> Option<ScatterMeas> {
+        None
     }
 
-    fn sample(&self, rng : &mut Rng) -> Emission {
-    }
-}
-
-impl<T : 'static + Texture> Material for DiffuseLight<T> {
-    fn scatter_meas(&self, r_in : &Ray, hit : &HitRecord) -> Box<Meas<Scatter>> {
-        box MZero
+    fn radiosity(&self) -> Option<Vec3> {
+        Some(*self.0 * PI)
     }
 
-    fn emission_meas(&self) -> Box<Meas<Emission>> {
-        box DLEMeas(self.0.clone())
-        // if dot(hit.normal, r_in.direction) > 0.0 {
-        //     self.0.tex_lookup(hit.uv, &hit.p)
-        // } else {
-        //     ZERO3
-        // }
+    fn emit(&self, normal : Vec3) -> Option<Box<Meas<Vec3>>> {
+        Some(box CosineDist::new(normal))
     }
 }
 

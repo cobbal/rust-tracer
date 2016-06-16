@@ -7,8 +7,6 @@ use texture::*;
 use material::*;
 
 use std::sync::Arc;
-use std::path::Path;
-use image;
 
 pub struct RenderTask {
     pub camera : Camera,
@@ -25,7 +23,7 @@ impl CornellBox {
         let center = vec3(278.0, 554.0, 279.5);
         let size = vec3(lw, 0.0, ld);
         let light : Arc<Material> =
-            Arc::new(DiffuseLight(Arc::new(ConstantTex(light_brightness * ONE3))));
+            Arc::new(DiffuseLight(Arc::new(light_brightness * ONE3)));
         let min = center - size;
         let max = center + size;
 

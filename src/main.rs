@@ -1,13 +1,15 @@
-#![feature(associated_consts)]
-#![feature(box_syntax)]
-#![feature(box_patterns)]
+#![feature(box_syntax, box_patterns)]
 #![feature(const_fn)]
 #![feature(custom_derive)]
 #![feature(associated_type_defaults)]
+#![feature(std_panic, panic_handler)]
+#![feature(trace_macros)]
+
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
 mod camera;
+#[macro_use]
 mod distribution;
 mod mat3;
 mod material;
@@ -18,6 +20,8 @@ mod render_target;
 mod tasks;
 mod texture;
 mod vec3;
+mod utils;
+mod mm_out;
 
 use material::*;
 use object::*;
@@ -25,9 +29,9 @@ use random::*;
 use ray::*;
 use render_target::*;
 use tasks::*;
-use vec3::*;
-use vec3::Vec3Index::*;
 use distribution::*;
+use mm_out::*;
+use utils::*;
 
 use std::f32;
 use std::sync::Arc;
@@ -35,6 +39,8 @@ use std::thread;
 use std::sync::mpsc::{channel, sync_channel, Sender};
 use std::io;
 use std::io::{Write};
+use std::panic;
+use std::process;
 
 extern crate image;
 extern crate rand;
@@ -42,7 +48,20 @@ extern crate num_cpus;
 extern crate byteorder;
 extern crate num;
 
+
+
+const DO_A_BLOOM : bool = true;
+
 fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
+    // make thread panics kill the program, as per
+    // http://stackoverflow.com/a/36031130/73681
+    let orig_hook = panic::take_hook();
+    panic::set_hook(box move |panic_info| {
+        // invoke the default hook and exit the process
+        orig_hook(panic_info);
+        process::exit(1);
+    });
+
     let render_task = Arc::new(render_task);
     let (nx, ny) = render_task.target_size;
     let mut main_target = RenderTarget::new(render_task.target_size);
@@ -129,7 +148,7 @@ fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
         if nsave < 10 { nsave = 10 };
 
         if prev_samp / nsave != main_target.samples / nsave {
-            main_target.write_png("trace.png");
+            main_target.write_png("trace.png", DO_A_BLOOM);
             // main_target.write_hdr("raw.rgb");
 
             print!("{} ", main_target.samples);
@@ -148,7 +167,7 @@ fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
         h.join().unwrap()
     }
 
-    main_target.write_png("trace.png");
+    main_target.write_png("trace.png", DO_A_BLOOM);
     main_target.write_hdr("raw.rgb");
 }
 
@@ -160,8 +179,21 @@ fn render_a_frame(rng : &mut Rng, task : &RenderTask, target : &mut RenderTarget
             let v = (y as f32 + rng.gen::<f32>()) / ny as f32;
 
             let r = task.camera.get_ray(rng, u, v);
+            let origin = RaySendingPoint {
+                point: r.origin,
+                directions: box Dirac(r.direction),
+            };
+            let Weighted(light, mut light_factor) = task.world.sample(rng);
+            light_factor *= task.world.total_mass();
+            let dest = RaySendingPoint {
+                point: light.0.origin,
+                directions: light.0.out_dir,
+            };
 
-            let col = ray_trace(rng, r, &*task.world);
+            let col = bitrace(rng,
+                              origin, dest,
+                              light_factor * light.0.alb,
+                              r.time, &*task.world, 0);
 
             for i in 0..3 {
                 target[(x, y)][i] += col[i] as f64;
@@ -171,96 +203,141 @@ fn render_a_frame(rng : &mut Rng, task : &RenderTask, target : &mut RenderTarget
     target.samples += 1;
 }
 
+struct RaySendingPoint {
+    point : Vec3,
+    directions : Box<Meas<Vec3>>,
+}
 
-#[inline(never)]
-fn ray_trace(rng : &mut Rng, r0 : Ray, world : &Object) -> Vec3 {
-    let mut accumulator = vec3(0.0, 0.0, 0.0);
-    let mut attenuation = vec3(1.0, 1.0, 1.0);
-    let mut r = r0;
-    let max_ttl = 50;
-    for bounce in 0..max_ttl {
-        match world.hit(rng, &r, (0.001, f32::INFINITY)) {
-            Some(hit) => {
-                let emitted = hit.material.emitted(&r, &hit);
-                accumulator += emitted * attenuation;
-                match hit.material.scatter(rng, &r, &hit) {
-                    Some(mut scatter) => {
+fn bitrace(
+    rng : &mut Rng,
+    origin : RaySendingPoint,
+    destination : RaySendingPoint,
+    light_color : Vec3,
+    time : f32,
+    world : &Object,
+    depth : i32,
+) -> Color {
+    let light_terminate_prob : f32 = if depth > 0 { 0.2 } else { 0.0 };
+    let mut ll = 1.0;
+    let ll = &mut ll;
 
-                        // let min = ivec3(213, 554, 227);
-                        // let max = ivec3(343, 554, 332);
+    let factor = |ll : &mut f32, p : f32| {
+        // println!("factor({})", p);
+        *ll *= p;
+    };
 
-                        // let interp = vec3(rng.gen(), rng.gen(), rng.gen());
+    let res = if rng.gen::<f32>() < light_terminate_prob {
+        factor(ll, 1.0 / light_terminate_prob);
 
-                        // let on_light = (ONE3 - interp) * min + interp * max;
-                        // let mut to_light = on_light - hit.p;
-                        // let dist_squared = dot(to_light, to_light);
-                        // to_light = to_light.unit();
-                        // if dot(to_light, hit.normal) < 0.0 {
-                        //     break;
-                        // }
-                        // let light_area = (max[X] - min[X]) * (max[Z] - min[Z]);
-                        // let light_cosine = to_light[Y].abs();
-                        // if light_cosine < 0.000001 {
-                        //     break;
-                        // }
-                        // let pdf = dist_squared / (light_cosine * light_area);
-                        // scatter.r_out.direction = to_light;
-
-                        let p = CosineDist::new(hit.normal);
-                        scatter.r_out.direction = p.sample(rng);
-                        let pdf = p.pdf(&scatter.r_out.direction);
-
-                        let local_att = scatter.alb
-                            * hit.material.scatter_pdf(&r, &hit, &scatter.r_out)
-                            / pdf;
-
-
-                        r = scatter.r_out;
-                        attenuation *= local_att;
-                        // if false {
-                        //     let thresh = 0.25;
-                        //     if
-                        //         attenuation[R] < thresh &&
-                        //         attenuation[G] < thresh &&
-                        //         attenuation[B] < thresh
-                        //     {
-                        //         if rng.gen::<f32>() < thresh {
-                        //             attenuation = attenuation / thresh;
-                        //         } else {
-                        //             break;
-                        //         }
-                        //     }
-                        // }
-                        continue;
-                    },
-                    None => {
-                        break;
-                    }
-                }
-            },
+        let dir = destination.point - origin.point;
+        let ray = ray(origin.point, dir, time);
+        match trace1(rng, ray, world) {
+            // TODO: better shadows
+            Some(_) => ZERO3,
             None => {
-                break;
+                factor(ll, origin.directions.pdf(&dir));
+                factor(ll, destination.directions.pdf(&-dir));
+                factor(ll, 1.0 / dot(dir, dir));
+                light_color
             }
         }
-        panic!()
+    } else {
+        factor(ll, 1.0 / (1.0 - light_terminate_prob));
+        let Weighted(dir, dir_weight) = origin.directions.sample(rng);
+        factor(ll, dir_weight);
+        let ray = ray(origin.point, dir, time);
+        if let Some((pt, color)) = trace1(rng, ray, world) {
+            color * bitrace(rng,
+                            pt, destination,
+                            light_color,
+                            time, world, depth + 1)
+        } else {
+            ZERO3
+        }
+    };
+
+    (*ll) * res
+}
+
+fn trace1(rng : &mut Rng, r : Ray, world : &Object) -> Option<(RaySendingPoint, Color)> {
+    match world.hit(rng, &r, (0.001, f32::INFINITY)) {
+        Some(hit) => {
+            let m = hit.material.scatter(&r, &hit);
+            match hit.material.scatter(&r, &hit) {
+                None => None,
+                Some(scatter) => {
+                    Some((RaySendingPoint {
+                        point: hit.p,
+                        directions: scatter.out_dir
+                    }, scatter.alb))
+                }
+            }
+        }
+        None => None
+    }
+}
+
+fn test_mplus(rng : &mut Rng) {
+    let a = Dirac(3.0);
+    let b = Dirac(4.0);
+    let c = MPlus::new(a, b, 0.5);
+
+    let mut sum : f32 = 0.0;
+    let mut count : f32 = 0.0;
+
+    for i in 0..20 {
+        println!("{:?}", c.sample(rng))
     }
 
-    return accumulator;
+    for i in 0..10000 {
+        let Weighted(x, w) = c.sample(rng);
+        sum += x * w;
+        count += 1.0;
+    }
+
+    println!("{} / {} = {}", sum, count, sum / count);
+}
+
+#[derive(Clone)]
+struct CosineSample(CosineDist);
+impl MassAndSample<Vec3> for CosineSample {
+    fn total_mass(&self) -> f32 { 1.0 }
+    fn sample(&self, rng : &mut Rng) -> Weighted<Vec3> {
+        let c = rand_in_ball(rng);
+        let w = self.0.pdf(&c);
+        Weighted(c, w)
+    }
+}
+
+fn test_dists(rng : &mut Rng) {
+
+    let norm = rand_in_ball(rng);
+    let cd = CosineDist::new(norm);
+    let cd2 = CosineSample(cd.clone());
+    let cd3 = Weighted(MPlus::new(cd.clone(), cd2.clone(), 0.5), 0.5);
+
+    let mut vec : Vec<Weighted<Vec3>> = vec![];
+    for i in 0..10000 {
+        let Weighted(v, w) = cd3.sample(rng);
+        vec.push(Weighted(v.unit(), w));
+    }
+
+    let out : Vec<&MMOut> = vec![&norm, &vec];
+    println!("{}", out.mm_out());
 }
 
 fn main() {
+
     let x = AABB{min: ZERO3, max: ZERO3};
     let r = ray(ZERO3, ZERO3, 0.0);
     x.hit(&r, (0.0, 1.0));
 
     let seed : RngSeed = rand::thread_rng().gen();
-    println!("let seed = {:?};", seed);
+    // println!("let seed = {:?};", seed);
     let mut rng : Rng = Rng::from_seed(seed);
 
-    let m = mat3::onb_from_w(ivec3(-1, 0, 0));
-    println!("{}", m);
-
-    // return;
+    // return test_mplus(&mut rng);
+    // return test_dists(&mut rng);
 
     let task = cornell_box(&mut rng);
 

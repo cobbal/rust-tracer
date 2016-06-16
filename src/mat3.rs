@@ -4,7 +4,7 @@ use std::fmt;
 use vec3::*;
 use vec3::Vec3Index::*;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Mat3(pub [f32; 9]);
 
 impl Mat3 {

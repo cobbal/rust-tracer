@@ -1,10 +1,10 @@
-use vec3::*;
 use mat3::*;
-use vec3::Vec3Index::*;
 use texture;
 use material::*;
 use random::*;
 use ray::*;
+use utils::*;
+use distribution::*;
 
 use std;
 use std::f32;
@@ -20,14 +20,16 @@ pub struct HitRecord<'a> {
     pub uv : (f32, f32),
 }
 
-pub trait Object : Sync + Send {
+pub struct EmissionMeas(pub ScatterMeas);
+
+pub trait Object : Sync + Send + MassAndSample<EmissionMeas> {
     fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord>;
     fn bounding_box(&self, time : (f32, f32)) -> AABB;
 }
 
-pub trait Emitter : Sync + Send {
-    fn emitting_surface_area(&self) -> f32;
-    fn sample_emission(&self, rng : &mut Rng) -> Ray;
+impl<'a> MassAndSample<EmissionMeas> for Upcast<&'a Object> {
+    fn total_mass(&self) -> f32 { self.0.total_mass() }
+    fn sample(&self, rng : &mut Rng) -> Weighted<EmissionMeas> { self.0.sample(rng) }
 }
 
 #[derive(Clone)]
@@ -74,6 +76,22 @@ pub fn sphere(
     moving_sphere(radius, center, center, 0.0, 1.0, material)
 }
 
+impl MassAndSample<EmissionMeas> for Sphere {
+    fn total_mass(&self) -> f32 {
+        if let Some(_) = self.material.radiosity() {
+            self.radius * 4.0 * PI
+        } else {
+            0.0
+        }
+    }
+
+    fn sample(&self, rng : &mut Rng) -> Weighted<EmissionMeas> {
+        let surface_area = self.radius * 4.0 * PI;
+        unimplemented!()
+    }
+}
+
+
 impl Object for Sphere {
     fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
         let center = self.center(r.time);
@@ -100,7 +118,6 @@ impl Object for Sphere {
         return None
     }
 
-
     fn bounding_box(&self, time : (f32, f32)) -> AABB {
         let r = self.radius;
         return AABB {
@@ -109,17 +126,6 @@ impl Object for Sphere {
         };
     }
 }
-
-impl Emitter for Sphere {
-    fn emitting_surface_area(&self) -> f32 {
-
-    }
-
-    fn sample_emission(&self, rng : &mut Rng) -> Ray {
-    }
-}
-
-
 #[derive(Clone, Copy, Debug)]
 pub struct AABB {
     pub min : Vec3,
@@ -158,9 +164,12 @@ impl AABB {
 
 pub struct BVHNode {
     pub left : Box<Object>,
+    left_mass : f32,
     pub right : Box<Object>,
+    right_mass : f32,
     pub bbox : AABB,
 }
+
 
 impl Object for BVHNode {
     fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
@@ -187,6 +196,18 @@ impl Object for BVHNode {
     }
 }
 
+impl MassAndSample<EmissionMeas> for BVHNode {
+    fn total_mass(&self) -> f32 {
+        self.left_mass + self.right_mass
+    }
+
+    fn sample(&self, rng : &mut Rng) -> Weighted<EmissionMeas> {
+        let total_mass = self.total_mass();
+        MPlus::new(Upcast(&*self.left),
+                   Upcast(&*self.right),
+                   self.left_mass / total_mass).sample(rng)
+    }
+}
 
 fn into_bvh_det(
     rng_fn : &mut FnMut() -> usize,
@@ -211,6 +232,8 @@ fn into_bvh_det(
             let lbb = left.bounding_box(time);
             let rbb = right.bounding_box(time);
             box BVHNode {
+                left_mass: left.total_mass(),
+                right_mass: right.total_mass(),
                 left: left,
                 right: right,
                 bbox: lbb.union(&rbb)
@@ -230,65 +253,48 @@ pub fn into_bvh(
         v, time)
 }
 
-pub struct ConstantMedium {
-    pub boundary : Box<Object>,
-    pub density : f32,
-    pub phase_function : Box<Material>,
-}
+// pub struct ConstantMedium {
+//     pub boundary : Box<Object>,
+//     pub density : f32,
+//     pub phase_function : Box<Material>,
+// }
 
-impl Object for ConstantMedium {
-    fn hit(
-        &self, rng : &mut Rng, r : &Ray, dist : (f32, f32)
-    ) -> Option<HitRecord> {
-        let mhit1 = self.boundary.hit(rng, r, (f32::MIN, f32::MAX));
-        if let Some(mut hit1) = mhit1 {
-            let mhit2 = self.boundary.hit(rng, r, (hit1.t + 0.0001, f32::MAX));
-            if let Some(mut hit2) = mhit2 {
-                hit1.t = hit1.t.max(dist.0);
-                hit2.t = hit2.t.min(dist.1);
-                if hit1.t >= hit2.t {
-                    return None
-                }
-                hit1.t = hit1.t.max(0.0);
+// impl Object for ConstantMedium {
+//     fn hit(
+//         &self, rng : &mut Rng, r : &Ray, dist : (f32, f32)
+//     ) -> Option<HitRecord> {
+//         let mhit1 = self.boundary.hit(rng, r, (f32::MIN, f32::MAX));
+//         if let Some(mut hit1) = mhit1 {
+//             let mhit2 = self.boundary.hit(rng, r, (hit1.t + 0.0001, f32::MAX));
+//             if let Some(mut hit2) = mhit2 {
+//                 hit1.t = hit1.t.max(dist.0);
+//                 hit2.t = hit2.t.min(dist.1);
+//                 if hit1.t >= hit2.t {
+//                     return None
+//                 }
+//                 hit1.t = hit1.t.max(0.0);
 
-                let dist_inside = (hit2.t - hit1.t) * r.direction.len();
-                let hit_dist = -(1.0 / self.density) * rng.gen::<f32>().ln();
-                if hit_dist < dist_inside {
-                    let t = hit1.t + hit_dist / r.direction.len();
-                    let p = r.at(t);
-                    let normal = ivec3(1, 0, 0);
-                    return Some(HitRecord {
-                        t: t, p: p,
-                        normal: normal, material: &*self.phase_function,
-                        uv: (0.0, 0.0),
-                    })
-                }
-            }
-        }
-        return None
-    }
+//                 let dist_inside = (hit2.t - hit1.t) * r.direction.len();
+//                 let hit_dist = -(1.0 / self.density) * rng.gen::<f32>().ln();
+//                 if hit_dist < dist_inside {
+//                     let t = hit1.t + hit_dist / r.direction.len();
+//                     let p = r.at(t);
+//                     let normal = ivec3(1, 0, 0);
+//                     return Some(HitRecord {
+//                         t: t, p: p,
+//                         normal: normal, material: &*self.phase_function,
+//                         uv: (0.0, 0.0),
+//                     })
+//                 }
+//             }
+//         }
+//         return None
+//     }
 
-    fn bounding_box(&self, time : (f32, f32)) -> AABB {
-        self.boundary.bounding_box(time)
-    }
-}
-
-pub struct FlipNormals<H : Object>(H);
-
-impl<H : Object> Object for FlipNormals<H> {
-    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
-        let FlipNormals(ref inner) = *self;
-        inner.hit(rng, r, dist).map(|mut hit| {
-            hit.normal = -1.0 * hit.normal;
-            return hit;
-        })
-    }
-
-    fn bounding_box(&self, time : (f32, f32)) -> AABB {
-        let FlipNormals(ref inner) = *self;
-        return inner.bounding_box(time);
-    }
-}
+//     fn bounding_box(&self, time : (f32, f32)) -> AABB {
+//         self.boundary.bounding_box(time)
+//     }
+// }
 
 pub fn cube(p0 : Vec3, p1 : Vec3, mat : &Arc<Material>) -> Box<Object> {
     into_bvh_det(&mut || 0, vec![
@@ -328,6 +334,16 @@ impl Object for Translate {
         inner_box.min += self.offset;
         inner_box.max += self.offset;
         inner_box
+    }
+}
+
+impl MassAndSample<EmissionMeas> for Translate {
+    fn total_mass(&self) -> f32 {
+        self.inner.total_mass()
+    }
+
+    fn sample(&self, rng : &mut Rng) -> Weighted<EmissionMeas> {
+        unimplemented!()
     }
 }
 
@@ -408,6 +424,16 @@ impl Object for Rotate {
     }
 }
 
+impl MassAndSample<EmissionMeas> for Rotate {
+    fn total_mass(&self) -> f32 {
+        self.inner.total_mass()
+    }
+
+    fn sample(&self, rng : &mut Rng) -> Weighted<EmissionMeas> {
+        unimplemented!()
+    }
+}
+
 macro_rules! aarect {
     ($XYRect:ident,
      [$x:ident, $X:ident],
@@ -418,14 +444,14 @@ macro_rules! aarect {
             pub $x : (f32, f32),
             pub $y : (f32, f32),
             pub $z : f32,
+            pub flip : bool,
         }
 
         impl $XYRect {
             pub fn new(
                 $x : (f32, f32), $y : (f32, f32), $z : f32, mat : &Arc<Material>, flip : bool
             ) -> Box<Object> {
-                let r = $XYRect {$x: $x, $y: $y, $z: $z, material: mat.clone()};
-                if flip { box FlipNormals(r) } else { box r }
+                box $XYRect {$x: $x, $y: $y, $z: $z, material: mat.clone(), flip: flip}
             }
         }
 
@@ -448,7 +474,7 @@ macro_rules! aarect {
                     p[$Y] = $y;
                     p[$Z] = self.$z;
                     let mut normal = ZERO3;
-                    normal[$Z] = 1.0;
+                    normal[$Z] = if self.flip { -1.0 } else { 1.0 };
                     Some(HitRecord {
                         t: t, p: p, normal: normal, material: &*self.material,
                         uv: (u, v)
@@ -466,6 +492,41 @@ macro_rules! aarect {
                 max[$Y] = self.$y.1;
                 max[$Z] = self.$z + 0.001;
                 AABB{min: min, max: max}
+            }
+        }
+
+        impl MassAndSample<EmissionMeas> for $XYRect {
+            fn total_mass(&self) -> f32 {
+                if let Some(_) = self.material.radiosity() {
+                    (self.$x.1 - self.$x.0) * (self.$y.1 - self.$y.0)
+                } else {
+                    0.0
+                }
+            }
+
+            fn sample(&self, rng : &mut Rng) -> Weighted<EmissionMeas> {
+                let surface_area = (self.$x.1 - self.$x.0) * (self.$y.1 - self.$y.0);
+
+                let mut origin = ZERO3;
+                origin[$X] = self.$x.0 + rng.gen::<f32>() * (self.$x.1 - self.$x.0);
+                origin[$Y] = self.$y.0 + rng.gen::<f32>() * (self.$y.1 - self.$y.0);
+                origin[$Z] = self.$z;
+
+                let mut normal = ZERO3;
+                normal[$Z] = -if self.flip { -1.0 } else { 1.0 };
+
+                match (self.material.radiosity(), self.material.emit(normal)) {
+                    (Some(color), Some(direction_meas)) => {
+                        Weighted(
+                            EmissionMeas(
+                                ScatterMeas{
+                                    alb: color,
+                                    origin: origin,
+                                    out_dir: direction_meas
+                                }), 1.0)
+                    }
+                    (_, _) => panic!("bad emitting things..."),
+                }
             }
         })
 }
