@@ -4,6 +4,7 @@ use material::*;
 use random::*;
 use ray::*;
 use utils::*;
+use vec3::*;
 use distribution::*;
 
 use std;

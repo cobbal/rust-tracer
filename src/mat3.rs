@@ -1,8 +1,7 @@
+use vec3::*;
+
 use std::ops::*;
 use std::fmt;
-
-use vec3::*;
-use vec3::Vec3Index::*;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Mat3(pub [f32; 9]);

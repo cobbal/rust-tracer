@@ -4,13 +4,14 @@
 #![feature(associated_type_defaults)]
 #![feature(std_panic, panic_handler)]
 #![feature(trace_macros)]
+#![feature(non_ascii_idents)]
 
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
-mod camera;
 #[macro_use]
 mod distribution;
+mod camera;
 mod mat3;
 mod material;
 mod object;
@@ -32,6 +33,8 @@ use tasks::*;
 use distribution::*;
 use mm_out::*;
 use utils::*;
+use vec3::*;
+use camera::*;
 
 use std::f32;
 use std::sync::Arc;
@@ -48,9 +51,7 @@ extern crate num_cpus;
 extern crate byteorder;
 extern crate num;
 
-
-
-const DO_A_BLOOM : bool = true;
+const ENABLE_BLOOM : bool = true;
 
 fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
     // make thread panics kill the program, as per
@@ -148,7 +149,7 @@ fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
         if nsave < 10 { nsave = 10 };
 
         if prev_samp / nsave != main_target.samples / nsave {
-            main_target.write_png("trace.png", DO_A_BLOOM);
+            main_target.write_png("trace.png", ENABLE_BLOOM);
             // main_target.write_hdr("raw.rgb");
 
             print!("{} ", main_target.samples);
@@ -167,9 +168,31 @@ fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
         h.join().unwrap()
     }
 
-    main_target.write_png("trace.png", DO_A_BLOOM);
+    main_target.write_png("trace.png", ENABLE_BLOOM);
     main_target.write_hdr("raw.rgb");
 }
+
+#[derive(Clone, Debug)]
+struct LensPoint {
+    camera : Camera,
+    origin : Vec3,
+    time : f32,
+}
+
+mimpl!{[] Meas[Vec3] for LensPoint {
+    total_mass(&self) {
+        self.camera.total_mass()
+    }
+
+    sample(&self, rng) {
+        let st = (rng.gen(), rng.gen());
+        Weighted(self.camera.get_ray_from(rng, st, self.origin).direction, 1.0)
+    }
+
+    pdf(&self, x) {
+        self.camera.pdf(&Ray::new(self.origin, *x, self.time))
+    }
+}}
 
 fn render_a_frame(rng : &mut Rng, task : &RenderTask, target : &mut RenderTarget) {
     let (nx, ny) = task.target_size;
@@ -178,22 +201,31 @@ fn render_a_frame(rng : &mut Rng, task : &RenderTask, target : &mut RenderTarget
             let u = (x as f32 + rng.gen::<f32>()) / nx as f32;
             let v = (y as f32 + rng.gen::<f32>()) / ny as f32;
 
-            let r = task.camera.get_ray(rng, u, v);
+            let r = task.camera.get_ray(rng, (u, v));
+            let camera_point = Dirac(r.direction);
+            let camera_fuzzy = LensPoint {
+                origin: r.origin,
+                camera: task.camera.clone(),
+                time: r.time,
+            };
             let origin = RaySendingPoint {
                 point: r.origin,
-                directions: box Dirac(r.direction),
+                directions: box camera_point,
+                is_dirac: true,
             };
             let Weighted(light, mut light_factor) = task.world.sample(rng);
             light_factor *= task.world.total_mass();
+
             let dest = RaySendingPoint {
                 point: light.0.origin,
                 directions: light.0.out_dir,
+                is_dirac: false,
             };
 
             let col = bitrace(rng,
                               origin, dest,
                               light_factor * light.0.alb,
-                              r.time, &*task.world, 0);
+                              r.time, &*task.world);
 
             for i in 0..3 {
                 target[(x, y)][i] += col[i] as f64;
@@ -206,6 +238,7 @@ fn render_a_frame(rng : &mut Rng, task : &RenderTask, target : &mut RenderTarget
 struct RaySendingPoint {
     point : Vec3,
     directions : Box<Meas<Vec3>>,
+    is_dirac : bool,
 }
 
 fn bitrace(
@@ -215,9 +248,8 @@ fn bitrace(
     light_color : Vec3,
     time : f32,
     world : &Object,
-    depth : i32,
 ) -> Color {
-    let light_terminate_prob : f32 = if depth > 0 { 0.2 } else { 0.0 };
+    let light_terminate_prob : f32 = 0.2;
     let mut ll = 1.0;
     let ll = &mut ll;
 
@@ -226,55 +258,62 @@ fn bitrace(
         *ll *= p;
     };
 
+    let ray : Ray;
+
     let res = if rng.gen::<f32>() < light_terminate_prob {
         factor(ll, 1.0 / light_terminate_prob);
 
         let dir = destination.point - origin.point;
-        let ray = ray(origin.point, dir, time);
-        match trace1(rng, ray, world) {
-            // TODO: better shadows
-            Some(_) => ZERO3,
-            None => {
-                factor(ll, origin.directions.pdf(&dir));
-                factor(ll, destination.directions.pdf(&-dir));
-                factor(ll, 1.0 / dot(dir, dir));
-                light_color
+        ray = Ray::new(origin.point, dir, time);
+
+        match trace1(rng, ray.clone(), world) {
+            None => ZERO3,
+            Some((t, mi)) => {
+                if t < 1.0 - 0.0001 {
+                    ZERO3
+                    // TODO: better shadows
+                } else {
+                    factor(ll, origin.directions.pdf(&dir));
+                    factor(ll, destination.directions.pdf(&-dir));
+                    factor(ll, 1.0 / dot(dir, dir));
+                    light_color
+                }
             }
         }
     } else {
         factor(ll, 1.0 / (1.0 - light_terminate_prob));
         let Weighted(dir, dir_weight) = origin.directions.sample(rng);
         factor(ll, dir_weight);
-        let ray = ray(origin.point, dir, time);
-        if let Some((pt, color)) = trace1(rng, ray, world) {
-            color * bitrace(rng,
-                            pt, destination,
-                            light_color,
-                            time, world, depth + 1)
-        } else {
-            ZERO3
+        ray = Ray::new(origin.point, dir, time);
+        match trace1(rng, ray.clone(), world) {
+            None => ZERO3,
+            Some((_, Absorb)) => ZERO3,
+            Some((_, Emit(color))) =>
+                // kinda hacky, but don't know how else to solve it
+                if origin.is_dirac { color } else { ZERO3 },
+            Some((_, Scatter(scatter_meas))) => {
+                let pt = RaySendingPoint {
+                    point: scatter_meas.origin,
+                    directions: scatter_meas.out_dir,
+                    is_dirac: false,
+                };
+                scatter_meas.alb * bitrace(rng,
+                                           pt, destination,
+                                           light_color,
+                                           time, world)
+            }
         }
     };
 
     (*ll) * res
 }
 
-fn trace1(rng : &mut Rng, r : Ray, world : &Object) -> Option<(RaySendingPoint, Color)> {
-    match world.hit(rng, &r, (0.001, f32::INFINITY)) {
-        Some(hit) => {
-            let m = hit.material.scatter(&r, &hit);
-            match hit.material.scatter(&r, &hit) {
-                None => None,
-                Some(scatter) => {
-                    Some((RaySendingPoint {
-                        point: hit.p,
-                        directions: scatter.out_dir
-                    }, scatter.alb))
-                }
-            }
-        }
-        None => None
-    }
+type T1R = Option<(f32, MaterialInteraction)>;
+
+fn trace1(rng : &mut Rng, r : Ray, world : &Object) -> T1R {
+    world.hit(rng, &r, (0.001, f32::INFINITY)).map( |hit| {
+        (hit.t, hit.material.scatter(&r, &hit))
+    })
 }
 
 fn test_mplus(rng : &mut Rng) {
@@ -310,7 +349,6 @@ impl MassAndSample<Vec3> for CosineSample {
 }
 
 fn test_dists(rng : &mut Rng) {
-
     let norm = rand_in_ball(rng);
     let cd = CosineDist::new(norm);
     let cd2 = CosineSample(cd.clone());
@@ -326,10 +364,17 @@ fn test_dists(rng : &mut Rng) {
     println!("{}", out.mm_out());
 }
 
+fn test_camera_meas(rng : &mut Rng) {
+    let cam = cornell_box(rng).camera;
+
+    let r = cam.get_ray(rng, (0.5, 0.5));
+    println!("{:?} {}", r, cam.pdf(&r))
+}
+
 fn main() {
 
     let x = AABB{min: ZERO3, max: ZERO3};
-    let r = ray(ZERO3, ZERO3, 0.0);
+    let r = Ray::new(ZERO3, ZERO3, 0.0);
     x.hit(&r, (0.0, 1.0));
 
     let seed : RngSeed = rand::thread_rng().gen();
@@ -338,6 +383,7 @@ fn main() {
 
     // return test_mplus(&mut rng);
     // return test_dists(&mut rng);
+    // return test_camera_meas(&mut rng);
 
     let task = cornell_box(&mut rng);
 

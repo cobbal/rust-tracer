@@ -3,6 +3,7 @@ use object::*;
 use texture::*;
 use distribution::*;
 use utils::*;
+use vec3::*;
 
 use std::sync::Arc;
 use std::f32::consts::PI;
@@ -16,10 +17,12 @@ pub struct ScatterMeas {
 pub enum MaterialInteraction {
     Scatter(ScatterMeas),
     Emit(Color),
+    Absorb,
 }
+pub use self::MaterialInteraction::*;
 
 pub trait Material : Send + Sync {
-    fn scatter(&self, r_in : &Ray, hit : &HitRecord) -> Option<ScatterMeas>;
+    fn scatter(&self, r_in : &Ray, hit : &HitRecord) -> MaterialInteraction;
     fn radiosity(&self) -> Option<Vec3> { None }
     fn emit(&self, normal : Vec3) -> Option<Box<Meas<Vec3>>> { None }
 }
@@ -36,9 +39,9 @@ impl<T : Texture> Lambertian<T> {
 impl<T : Texture> Material for Lambertian<T> {
     fn scatter(
         &self, r_in : &Ray, hit : &HitRecord
-    ) -> Option<ScatterMeas> {
+    ) -> MaterialInteraction {
 
-        return Some(ScatterMeas {
+        return Scatter(ScatterMeas {
             alb: self.0.tex_lookup(hit.uv, &hit.p),
             origin: hit.p,
             out_dir: box CosineDist::new(hit.normal),
@@ -126,8 +129,8 @@ impl<T : Texture> Material for Lambertian<T> {
 pub struct DiffuseLight<T>(pub Arc<T>);
 
 impl Material for DiffuseLight<Vec3> {
-    fn scatter(&self, r_in : &Ray, hit : &HitRecord) -> Option<ScatterMeas> {
-        None
+    fn scatter(&self, r_in : &Ray, hit : &HitRecord) -> MaterialInteraction {
+        Emit(*self.0)
     }
 
     fn radiosity(&self) -> Option<Vec3> {

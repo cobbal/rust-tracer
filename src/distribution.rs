@@ -172,6 +172,10 @@ impl<T, A> Meas<T> for Weighted<A> where A : Meas<T> {
     }
 }
 
+pub fn mix_measures<A, B>(λ : f32, a : A, b : B) -> MPlus<Weighted<A>, Weighted<B>> {
+    MPlus::new(Weighted(a, λ), Weighted(b, 1.0 - λ), λ)
+}
+
 // impl<T, A> MassAndSample<T> for Box<A> where A : MassAndSample<T> {
 //     fn total_mass(&self) -> f32 { (*self).total_mass() }
 //     fn sample(&self, rng : &mut Rng) -> Weighted<T> { (*self).sample(rng) }

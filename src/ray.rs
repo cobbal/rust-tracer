@@ -7,12 +7,13 @@ pub struct Ray {
     pub time : f32,
 }
 
-pub fn ray(origin : Vec3, direction : Vec3, time : f32) -> Ray {
-    return Ray { origin: origin, direction: direction, time: time };
-}
 
 impl Ray {
     pub fn at(&self, t : f32) -> Vec3 {
         return &self.origin + &(t * &self.direction);
+    }
+
+    pub fn new(origin : Vec3, direction : Vec3, time : f32) -> Ray {
+        return Ray { origin: origin, direction: direction, time: time };
     }
 }

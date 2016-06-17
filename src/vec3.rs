@@ -198,6 +198,7 @@ impl<'a> Neg for &'a Vec3 {
 pub enum Vec3Index {
     X, Y, Z,
 }
+pub use self::Vec3Index::*;
 
 pub const R : Vec3Index = Vec3Index::X;
 pub const G : Vec3Index = Vec3Index::Y;

@@ -1,5 +1,4 @@
 use vec3::*;
-use vec3::Vec3Index::*;
 use camera::*;
 use object::*;
 use random::*;
