@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Andrew Cobb <andrew.cobb@gmail.com>"]
 
 [profile.release]
-debug = true
+# debug = true
 
 [dependencies]
 image = "*"

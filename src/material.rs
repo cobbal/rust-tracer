@@ -37,15 +37,13 @@ impl<T : Texture> Lambertian<T> {
 }
 
 impl<T : Texture> Material for Lambertian<T> {
-    fn scatter(
-        &self, r_in : &Ray, hit : &HitRecord
-    ) -> MaterialInteraction {
-
-        return Scatter(ScatterMeas {
+    fn scatter(&self, r_in : &Ray, hit : &HitRecord) -> MaterialInteraction
+    {
+        Scatter(ScatterMeas {
             alb: self.0.tex_lookup(hit.uv, &hit.p),
             origin: hit.p,
             out_dir: box CosineDist::new(hit.normal),
-        });
+        })
     }
 }
 
@@ -68,23 +66,39 @@ impl<T : Texture> Material for Lambertian<T> {
 //     }
 // }}
 
-// pub struct Metal {
-//     pub albedo : Vec3,
-//     pub fuzz : f32,
-// }
+pub struct Metal {
+    pub albedo : Vec3,
+    pub fuzz : f32,
+}
 
-// impl Material for Metal {
-//     fn scatter(&self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord)
-//                -> Option<(Ray, Vec3)> {
-//         let dir = r_in.direction.unit();
-//         let scattered = reflect(dir, hit.normal) + self.fuzz * rand_in_ball(rng);
-//         if dot(scattered, hit.normal) <= 0.0 {
-//             return None
-//         }
-//         return Some((ray(hit.p, scattered, r_in.time),
-//                      self.albedo));
-//     }
-// }
+impl Material for Metal {
+
+    fn scatter(&self, r_in : &Ray, hit : &HitRecord) -> MaterialInteraction
+    {
+        // Scatter(ScatterMeas {
+        //     alb: self.0.tex_lookup(hit.uv, &hit.p),
+        //     origin: hit.p,
+        //     out_dir: box CosineDist::new(hit.normal),
+        // })
+        let in_dir = r_in.direction.unit();
+        let out_dir = reflect(in_dir, hit.normal);
+        Scatter(ScatterMeas {
+            origin: hit.p,
+            out_dir: box Dirac(out_dir),
+            alb: self.albedo,
+        })
+        // Redirect(Ray::new(hit.p, out_dir, r_in.time))
+        // let scattered = reflect(dir, hit.normal) + self.fuzz * rand_in_ball(rng);
+        // if dot(scattered, hit.normal) <= 0.0 {
+        //     return None
+        // }
+        // return Some((ray(hit.p, scattered, r_in.time),
+        //              self.albedo));
+    }
+
+    fn radiosity(&self) -> Option<Vec3> { None }
+    fn emit(&self, normal : Vec3) -> Option<Box<Meas<Vec3>>> { None }
+}
 
 // pub struct Dielectric(pub f32);
 
@@ -142,9 +156,9 @@ impl Material for DiffuseLight<Vec3> {
     }
 }
 
-// pub fn reflect(v : Vec3, n : Vec3) -> Vec3 {
-//     return v - 2.0 * dot(v, n) * n;
-// }
+pub fn reflect(v : Vec3, n : Vec3) -> Vec3 {
+    return v - 2.0 * dot(v, n) * n;
+}
 
 // pub fn refract(v : Vec3, n : Vec3, ni_over_nt : f32) -> Option<Vec3> {
 //     let uv = v.unit();

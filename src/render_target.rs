@@ -30,11 +30,11 @@ impl RenderTarget {
     }
 
     #[allow(dead_code)]
-    pub fn write_png(&mut self, filename : &str, enable_bloom : bool) {
+    pub fn write_png(&mut self, filename : &str, bloom_radius : Option<f32>) {
         let (nx, ny) = self.size;
         let ns = self.samples;
         let mut img = image::DynamicImage::new_rgb8(nx, ny);
-        let bloom = if enable_bloom { self.bloom() } else { Image32::new(0, 0) };
+        let bloom = bloom_radius.map(|r| self.bloom(r));
 
         for y in 0..ny {
             for x in 0..nx {
@@ -42,7 +42,7 @@ impl RenderTarget {
 
                 for e in 0..3 {
                     col[e] /= ns as f64;
-                    if enable_bloom {
+                    if let Some(ref bloom) = bloom {
                         col[e] += bloom.get_pixel(x, y).data[0] as f64;
                     }
                     col[e] = clamp(col[e], 0.0, 1.0);
@@ -75,7 +75,7 @@ impl RenderTarget {
         fout.write(bytes).unwrap();
     }
 
-    fn bloom(&mut self) -> Image32 {
+    fn bloom(&mut self, radius : f32) -> Image32 {
         let (nx, ny) = self.size;
 
         let luma_matrix = vec3(0.299, 0.587, 0.114);
@@ -91,7 +91,7 @@ impl RenderTarget {
         }).collect();
 
         let im = Image32::from_vec(nx, ny, lumae).unwrap();
-        image::imageops::blur(&im, 2.5)
+        image::imageops::blur(&im, radius)
     }
 }
 

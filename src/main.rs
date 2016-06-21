@@ -51,7 +51,7 @@ extern crate num_cpus;
 extern crate byteorder;
 extern crate num;
 
-const ENABLE_BLOOM : bool = true;
+const ENABLE_BLOOM : Option<f32> = Some(5.0);
 
 fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
     // make thread panics kill the program, as per
@@ -140,6 +140,7 @@ fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
         let prev_samp = main_target.samples;
 
         let copy_cutoff = if s < 10 * nworkers as u32 { 0 } else { 20 };
+        let copy_cutoff = 4;
 
         if worker_target.samples >= copy_cutoff {
             copy_to_main_target(&mut main_target, &mut worker_target);
@@ -211,7 +212,6 @@ fn render_a_frame(rng : &mut Rng, task : &RenderTask, target : &mut RenderTarget
             let origin = RaySendingPoint {
                 point: r.origin,
                 directions: box camera_point,
-                is_dirac: true,
             };
             let Weighted(light, mut light_factor) = task.world.sample(rng);
             light_factor *= task.world.total_mass();
@@ -219,13 +219,22 @@ fn render_a_frame(rng : &mut Rng, task : &RenderTask, target : &mut RenderTarget
             let dest = RaySendingPoint {
                 point: light.0.origin,
                 directions: light.0.out_dir,
-                is_dirac: false,
             };
 
-            let col = bitrace(rng,
+            let mut col = bitrace(rng,
                               origin, dest,
                               light_factor * light.0.alb,
-                              r.time, &*task.world);
+                              r.time, &*task.world, 0);
+
+            let mut bad = false;
+            for i in 0..3 {
+                if !col[i].is_finite() {
+                    bad = true;
+                }
+            }
+            if bad {
+                continue;
+            }
 
             for i in 0..3 {
                 target[(x, y)][i] += col[i] as f64;
@@ -238,7 +247,6 @@ fn render_a_frame(rng : &mut Rng, task : &RenderTask, target : &mut RenderTarget
 struct RaySendingPoint {
     point : Vec3,
     directions : Box<Meas<Vec3>>,
-    is_dirac : bool,
 }
 
 fn bitrace(
@@ -248,8 +256,31 @@ fn bitrace(
     light_color : Vec3,
     time : f32,
     world : &Object,
+    depth : i32,
 ) -> Color {
-    let light_terminate_prob : f32 = 0.2;
+
+    if depth > 100 {
+        return ZERO3;
+    }
+
+    let mut forwards = rng.gen();
+    let mut light_terminate_prob : f32 = 0.9;
+
+    if origin.directions.is_pointy() {
+        forwards = true;
+        light_terminate_prob = 0.0;
+    } else if destination.directions.is_pointy() {
+        forwards = false;
+        light_terminate_prob = 0.0;
+    }
+
+    let (origin, destination) =
+        if forwards {
+            (origin, destination)
+        } else {
+            (destination, origin)
+        };
+
     let mut ll = 1.0;
     let ll = &mut ll;
 
@@ -290,17 +321,16 @@ fn bitrace(
             Some((_, Absorb)) => ZERO3,
             Some((_, Emit(color))) =>
                 // kinda hacky, but don't know how else to solve it
-                if origin.is_dirac { color } else { ZERO3 },
+                if origin.directions.is_pointy() { color } else { ZERO3 },
             Some((_, Scatter(scatter_meas))) => {
                 let pt = RaySendingPoint {
                     point: scatter_meas.origin,
                     directions: scatter_meas.out_dir,
-                    is_dirac: false,
                 };
                 scatter_meas.alb * bitrace(rng,
                                            pt, destination,
                                            light_color,
-                                           time, world)
+                                           time, world, depth + 1)
             }
         }
     };

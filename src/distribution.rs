@@ -16,17 +16,20 @@ pub trait MassAndSample<T> {
 
 pub trait Meas<T> : MassAndSample<T> + Debug {
     fn pdf(&self, x : &T) -> f32;
+    fn is_pointy(&self) -> bool;
 }
 
 macro_rules! items {
     ($($item:item)*) => ($($item)*);
 }
 
-macro_rules! mimpl {
+
+macro_rules! mimpl_full {
     {[$($TVs:tt)*] Meas[$MT:tt] for $T:ty {
         total_mass(&$self0:tt) $body0:tt
         sample(&$self1:tt, $rng:ident) $body1:tt
         pdf(&$self2:tt, $x:ident) $body2:tt
+        is_pointy(&$self3:tt) $body3:tt
     }} => {
         items! {
             impl<$($TVs)*> MassAndSample<$MT> for $T {
@@ -35,10 +38,28 @@ macro_rules! mimpl {
             }
             impl<$($TVs)*> Meas<$MT> for $T {
                 fn pdf(&$self2, $x : &$MT) -> f32 $body2
+                fn is_pointy(&$self3) -> bool $body3
             }
         }
     };
 }
+
+macro_rules! mimpl {
+    {[$($TVs:tt)*] Meas[$MT:tt] for $T:ty {
+        total_mass(&$self0:tt) $body0:tt
+        sample(&$self1:tt, $rng:ident) $body1:tt
+        pdf(&$self2:tt, $x:ident) $body2:tt
+    }} => {
+        mimpl_full!{[$($TVs)*] Meas[$MT] for $T {
+            total_mass(&$self0) $body0
+            sample(&$self1, $rng) $body1
+            pdf(&$self2, $x) $body2
+            is_pointy(&self) { false }
+        }}
+    };
+}
+
+
 
 // useful measures
 
@@ -56,9 +77,9 @@ pub fn random_cosine_direction(rng : &mut Rng) -> Vec3 {
 pub struct CosineDist(Mat3);
 
 impl CosineDist {
-    pub fn new(w : Vec3) -> Self {
-        CosineDist(onb_from_w(w))
-    }
+pub fn new(w : Vec3) -> Self {
+    CosineDist(onb_from_w(w))
+}
 }
 
 
@@ -73,49 +94,49 @@ mimpl!{[] Meas[Vec3] for CosineDist {
         let cosine = dot(x.unit(), self.0 * ivec3(0, 0, 1));
         cosine.max(0.0) / PI
     }
-
 }}
 
 #[derive(Clone, Debug)]
 pub struct HemisphereDist(pub Vec3);
 
 mimpl!{[] Meas[Vec3] for HemisphereDist {
-    total_mass(&self) { 1.0 }
+total_mass(&self) { 1.0 }
 
-    sample(&self, rng) {
-        let mut v = rand_in_ball(rng).unit();
-        if dot(v, self.0) < 0.0 {
-            v = -v;
-        }
-        Weighted(v, 1.0)
+sample(&self, rng) {
+    let mut v = rand_in_ball(rng).unit();
+    if dot(v, self.0) < 0.0 {
+        v = -v;
     }
+    Weighted(v, 1.0)
+}
 
-    pdf(&self, x) {
-        if dot(*x, self.0) > 0.0 {
-            1.0 / (2.0 * PI)
-        } else {
-            0.0
-        }
+pdf(&self, x) {
+    if dot(*x, self.0) > 0.0 {
+        1.0 / (2.0 * PI)
+    } else {
+        0.0
     }
+}
 }}
 
 
 #[derive(Clone, Debug)]
 pub struct MZero;
 mimpl!{[T] Meas[T] for MZero {
-    total_mass(&self) { 0.0 }
-    sample(&self, rng) {
-        panic!("can't sample from MZero");
-    }
-    pdf(&self, x) { 0.0 }
+total_mass(&self) { 0.0 }
+sample(&self, rng) {
+    panic!("can't sample from MZero");
+}
+pdf(&self, x) { 0.0 }
 }}
 
 #[derive(Clone, Debug)]
 pub struct Dirac<T>(pub T);
-mimpl!{[T : Clone + Debug] Meas[T] for Dirac<T> {
+mimpl_full!{[T : Clone + Debug] Meas[T] for Dirac<T> {
     total_mass(&self) { 1.0 }
     sample(&self, rng) { Weighted(self.0.clone(), 1.0) }
     pdf(&self, x) { 0.0 /* HACK */ }
+    is_pointy(&self) { true }
 }}
 
 #[derive(Clone, Debug)]
@@ -152,6 +173,10 @@ impl <T, A, B> Meas<T> for MPlus<A, B> where A : Meas<T>, B : Meas<T> {
     fn pdf(&self, x : &T) -> f32 {
         self.a.pdf(x) + self.b.pdf(x)
     }
+
+    fn is_pointy(&self) -> bool {
+        self.a.is_pointy() || self.b.is_pointy()
+    }
 }
 
 impl<T, A> MassAndSample<T> for Weighted<A> where A : MassAndSample<T> {
@@ -169,6 +194,10 @@ impl<T, A> MassAndSample<T> for Weighted<A> where A : MassAndSample<T> {
 impl<T, A> Meas<T> for Weighted<A> where A : Meas<T> {
     fn pdf(&self, x : &T) -> f32 {
         self.0.pdf(x) * self.1
+    }
+
+    fn is_pointy(&self) -> bool {
+        self.0.is_pointy()
     }
 }
 

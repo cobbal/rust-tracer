@@ -58,13 +58,14 @@ pub fn cornell_box(rng : &mut Rng) -> RenderTask {
     let mut list : Vec<Box<Object>> = vec![];
 
     let white : Arc<Material> = Arc::new(Lambertian(ConstantTex(0.73 * ONE3)));
+    let aluminum : Arc<Material> = Arc::new(Metal{ albedo: vec3(0.8, 0.85, 0.88), fuzz: 0.0 });
 
     list.append(&mut CornellBox::box_only(rng, 15.0, (65.0, 52.5)));
 
     list.push(CornellBox::cube1(rng, &white));
-    list.push(CornellBox::cube2(rng, &white));
+    list.push(CornellBox::cube2(rng, &aluminum));
 
-    let size = (500, 500);
+    let size = (1000, 1000);
 
     let camera = camera_setup(ivec3(278, 278, -800))
         .look_at(ivec3(278, 278, 0))
@@ -79,6 +80,6 @@ pub fn cornell_box(rng : &mut Rng) -> RenderTask {
         world: world,
         camera: camera,
         target_size: size,
-        samples: 100,
+        samples: 100000,
     }
 }
