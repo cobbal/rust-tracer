@@ -10,8 +10,6 @@ use image;
 use image::{Luma};
 use image::math::utils::clamp;
 
-use num::{Float};
-
 type Image32 = image::ImageBuffer<Luma<f32>, Vec<f32>>;
 
 pub struct RenderTarget {

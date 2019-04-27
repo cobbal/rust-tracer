@@ -10,7 +10,7 @@ use std;
 use std::f32;
 use std::sync::Arc;
 use std::f32::consts::PI;
-use std::cmp::{max, min, Ordering};
+use std::cmp::Ordering;
 
 pub struct HitRecord<'a> {
     pub t : f32,

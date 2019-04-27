@@ -1,8 +1,6 @@
-#![feature(associated_consts)]
 #![feature(box_syntax)]
 #![feature(box_patterns)]
 #![feature(const_fn)]
-#![feature(custom_derive)]
 #![allow(unused_variables)]
 
 mod camera;
@@ -16,7 +14,6 @@ mod tasks;
 mod texture;
 mod vec3;
 
-use material::*;
 use object::*;
 use random::*;
 use ray::*;
@@ -217,22 +214,17 @@ fn ray_trace(rng : &mut Rng, r0 : Ray, world : &Object) -> Vec3 {
                 break;
             }
         }
-        panic!()
     }
 
     return accumulator;
 }
 
 fn main() {
-    let x = AABB{min: ZERO3, max: ZERO3};
-    let r = ray(ZERO3, ZERO3, 0.0);
-    x.hit(&r, (0.0, 1.0));
-
     let seed : RngSeed = rand::thread_rng().gen();
     println!("let seed = {:?};", seed);
     let mut rng : Rng = Rng::from_seed(seed);
 
-    let task = two_spheres(&mut rng);
+    let task = the_next_week(&mut rng);
 
     render_overlord(&mut rng, task);
 }
