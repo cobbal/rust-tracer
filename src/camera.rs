@@ -50,7 +50,7 @@ pub fn camera(
 }
 
 impl Camera {
-    pub fn get_ray(&self, rng : &mut Rng, s : f32, t : f32) -> Ray {
+    pub fn get_ray(&self, rng : &mut RngCore, s : f32, t : f32) -> Ray {
         let rd = self.lens_radius * rand_in_disk(rng);
         let offset = &self.u * rd[X] + &self.v * rd[Y];
 

@@ -65,7 +65,7 @@ pub struct PerlinNoise {
 }
 
 impl PerlinNoise {
-    pub fn new(rng : &mut Rng, n : usize) -> PerlinNoise {
+    pub fn new(rng : &mut RngCore, n : usize) -> PerlinNoise {
         let mut pn = PerlinNoise {
             n: n,
             ranvec: vec![ZERO3; n],
@@ -82,9 +82,9 @@ impl PerlinNoise {
             pn.perm_z[i] = i;
         }
 
-        rng.shuffle(&mut pn.perm_x[..]);
-        rng.shuffle(&mut pn.perm_y[..]);
-        rng.shuffle(&mut pn.perm_z[..]);
+        pn.perm_x[..].shuffle(rng);
+        pn.perm_y[..].shuffle(rng);
+        pn.perm_z[..].shuffle(rng);
 
         pn
     }
@@ -136,7 +136,7 @@ pub struct PerlinTexture {
 }
 
 impl PerlinTexture {
-    pub fn new(rng : &mut Rng, scale : f32) -> PerlinTexture {
+    pub fn new(rng : &mut RngCore, scale : f32) -> PerlinTexture {
         PerlinTexture {
             noise: Arc::new(PerlinNoise::new(rng, 256)),
             scale: scale,

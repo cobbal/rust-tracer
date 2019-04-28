@@ -21,6 +21,7 @@ use render_target::*;
 use tasks::*;
 use vec3::*;
 
+
 use std::f32;
 use std::sync::Arc;
 use std::thread;
@@ -28,29 +29,31 @@ use std::sync::mpsc::{channel, sync_channel, Sender};
 use std::io;
 use std::io::{Write};
 
-use std::fs;
-
 extern crate image;
 extern crate rand;
 extern crate num_cpus;
 extern crate byteorder;
 extern crate num;
+extern crate rand_chacha;
+extern crate rand_xorshift;
 
-fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
+fn render_overlord(base_rng : &mut RngCore, render_task : RenderTask) {
 
-    std::mem::drop(fs::OpenOptions::new()
-                   .write(true)
-                   .truncate(true)
-                   .create(true)
-                   .open("foo.txt")
-                   .unwrap());
+    // std::mem::drop(fs::OpenOptions::new()
+    //                .write(true)
+    //                .truncate(true)
+    //                .create(true)
+    //                .open("foo.txt")
+    //                .unwrap());
 
     let render_task = Arc::new(render_task);
     let (nx, ny) = render_task.target_size;
     let mut main_target = RenderTarget::new(render_task.target_size);
 
+    type XSeed = <XorShiftRng as SeedableRng>::Seed;
+
     enum Task {
-        Frame(u32, RngSeed, RenderTarget),
+        Frame(u32, XSeed, RenderTarget),
         Kill,
     };
 
@@ -82,7 +85,7 @@ fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
                     },
                     Task::Frame(s, seed, returned_target) => {
                         worker_target = returned_target;
-                        let mut rng = Rng::from_seed(seed);
+                        let mut rng = XorShiftRng::from_seed(seed);
                         render_a_frame(&mut rng, &render_task, &mut worker_target);
                     },
                 }
@@ -110,12 +113,7 @@ fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
         };
 
     for s in 0..render_task.samples {
-        // mix up the seed some or else the generator duplicates itself
-        let mut seed : RngSeed = base_rng.gen();
-        let a_big_prime_number = 2780564309;
-        for i in 1..seed.len() {
-            seed[i] += base_rng.gen::<u32>() * a_big_prime_number;
-        }
+        let mut seed : XSeed = base_rng.gen();
 
         let (i, mut worker_target) = task_rx.recv().unwrap();
 
@@ -131,7 +129,7 @@ fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
         if nsave < 10 { nsave = 10 };
 
         if prev_samp / nsave != main_target.samples / nsave {
-            main_target.write_png("trace.png");
+            main_target.write_img("trace.png");
             // main_target.write_hdr("raw.rgb");
 
             print!("{} ", main_target.samples);
@@ -150,11 +148,11 @@ fn render_overlord(base_rng : &mut Rng, render_task : RenderTask) {
         h.join().unwrap()
     }
 
-    main_target.write_png("trace.png");
+    main_target.write_img("trace.png");
     main_target.write_hdr("raw.rgb");
 }
 
-fn render_a_frame(rng : &mut Rng, task : &RenderTask, target : &mut RenderTarget) {
+fn render_a_frame(rng : &mut RngCore, task : &RenderTask, target : &mut RenderTarget) {
     let (nx, ny) = task.target_size;
     for y in 0..ny {
         for x in 0..nx {
@@ -175,7 +173,7 @@ fn render_a_frame(rng : &mut Rng, task : &RenderTask, target : &mut RenderTarget
 
 
 #[inline(never)]
-fn ray_trace(rng : &mut Rng, r0 : Ray, world : &Object) -> Vec3 {
+fn ray_trace(rng : &mut RngCore, r0 : Ray, world : &Object) -> Vec3 {
     let mut accumulator = vec3(0.0, 0.0, 0.0);
     let mut attenuation = vec3(1.0, 1.0, 1.0);
     let mut r = r0;
@@ -220,11 +218,11 @@ fn ray_trace(rng : &mut Rng, r0 : Ray, world : &Object) -> Vec3 {
 }
 
 fn main() {
-    let seed : RngSeed = rand::thread_rng().gen();
+    let seed : u64 = rand::thread_rng().gen();
     println!("let seed = {:?};", seed);
-    let mut rng : Rng = Rng::from_seed(seed);
+    let mut base_rng : ChaChaRng = ChaChaRng::seed_from_u64(seed);
 
-    let task = the_next_week(&mut rng);
+    let task = the_next_week(&mut base_rng);
 
-    render_overlord(&mut rng, task);
+    render_overlord(&mut base_rng, task);
 }

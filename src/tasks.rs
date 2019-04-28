@@ -18,7 +18,7 @@ pub struct RenderTask {
 }
 
 #[allow(dead_code)]
-pub fn one_weekend(rng : &mut Rng) -> RenderTask {
+pub fn one_weekend(rng : &mut RngCore) -> RenderTask {
     let mut list : Vec<Box<Object>> = Vec::new();
 
     let chexture = CheckerTex {
@@ -96,7 +96,7 @@ pub fn one_weekend(rng : &mut Rng) -> RenderTask {
 }
 
 #[allow(dead_code)]
-pub fn the_next_week(rng : &mut Rng) -> RenderTask {
+pub fn the_next_week(rng : &mut RngCore) -> RenderTask {
     let mut list : Vec<Box<Object>> = Vec::new();
     let mut boxlist : Vec<Box<Object>> = Vec::new();
     let mut boxlist2 : Vec<Box<Object>> = Vec::new();
@@ -139,7 +139,7 @@ pub fn the_next_week(rng : &mut Rng) -> RenderTask {
         }
     }
 
-    let complicated_geom = false;
+    let complicated_geom = true;
 
     if complicated_geom {
         //complicated ground
@@ -217,7 +217,7 @@ pub fn the_next_week(rng : &mut Rng) -> RenderTask {
 
     let world = into_bvh(rng, list, (0.0, 1.0));
 
-    let size = (500, 500);
+    let size = (1920, 1080);
 
     let lookfrom = ivec3(478, 278, -600);
     let lookat = ivec3(278, 278, 0);
@@ -236,12 +236,12 @@ pub fn the_next_week(rng : &mut Rng) -> RenderTask {
         world: world,
         camera: camera,
         target_size: size,
-        samples: 10000,
+        samples: 100000,
     }
 }
 
 #[allow(dead_code)]
-pub fn simple_light(rng : &mut Rng) -> RenderTask {
+pub fn simple_light(rng : &mut RngCore) -> RenderTask {
     let noise = Arc::new(PerlinNoise::new(rng, 256));
     let ntex = PerlinTexture::new(rng, 4.0);
     let mut list : Vec<Box<Object>> = Vec::new();
@@ -300,7 +300,7 @@ pub fn simple_light(rng : &mut Rng) -> RenderTask {
 }
 
 #[allow(dead_code)]
-pub fn cornell_box(rng : &mut Rng) -> RenderTask {
+pub fn cornell_box(rng : &mut RngCore) -> RenderTask {
     let mut list : Vec<Box<Object>> = vec![];
 
     let red : Arc<Material> = Arc::new(Lambertian(ConstantTex(vec3(0.65, 0.05, 0.05))));
@@ -359,7 +359,7 @@ pub fn cornell_box(rng : &mut Rng) -> RenderTask {
 }
 
 #[allow(dead_code)]
-pub fn two_spheres(rng : &mut Rng) -> RenderTask {
+pub fn two_spheres(rng : &mut RngCore) -> RenderTask {
     let mut list : Vec<Box<Object>> = vec![];
 
     let chexture = Arc::new(Lambertian(CheckerTex {
@@ -383,7 +383,7 @@ pub fn two_spheres(rng : &mut Rng) -> RenderTask {
 }
 
 #[allow(dead_code)]
-pub fn lambertian_test(rng : &mut Rng, angle : f32) -> RenderTask {
+pub fn lambertian_test(rng : &mut RngCore, angle : f32) -> RenderTask {
     let mut list : Vec<Box<Object>> = vec![];
 
     let light : Arc<Material> = Arc::new(DiffuseLight(ConstantTex(5.0 * ONE3)));

@@ -28,7 +28,7 @@ impl RenderTarget {
     }
 
     #[allow(dead_code)]
-    pub fn write_png(&mut self, filename : &str) {
+    pub fn write_img(&mut self, filename : &str) {
         let (nx, ny) = self.size;
         let ns = self.samples;
         let mut img = image::DynamicImage::new_rgb8(nx, ny);
@@ -56,8 +56,7 @@ impl RenderTarget {
                     = image::Rgb([ir, ig, ib]);
             }
         }
-        let ref mut fout = File::create(&Path::new(filename)).unwrap();
-        let _ = img.save(fout, image::PNG);
+        let _ = img.save(filename);
     }
 
 

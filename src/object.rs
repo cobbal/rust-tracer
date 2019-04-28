@@ -21,7 +21,7 @@ pub struct HitRecord<'a> {
 }
 
 pub trait Object : Sync + Send {
-    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord>;
+    fn hit(&self, rng : &mut RngCore, r : &Ray, dist : (f32, f32)) -> Option<HitRecord>;
     fn bounding_box(&self, time : (f32, f32)) -> AABB;
 }
 
@@ -70,7 +70,7 @@ pub fn sphere(
 }
 
 impl Object for Sphere {
-    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+    fn hit(&self, rng : &mut RngCore, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
         let center = self.center(r.time);
         let oc = &r.origin - &center;
         let a = dot(r.direction, r.direction);
@@ -149,7 +149,7 @@ pub struct BVHNode {
 }
 
 impl Object for BVHNode {
-    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+    fn hit(&self, rng : &mut RngCore, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
         if self.bbox.hit(r, dist) {
             let l_hit = self.left.hit(rng, r, dist);
             let r_hit = self.right.hit(rng, r, dist);
@@ -176,8 +176,8 @@ impl Object for BVHNode {
 
 fn into_bvh_det(
     rng_fn : &mut FnMut() -> usize,
-    // rng : &mut Rng,
-    mut v : Vec<Box<Object>>, time : (f32, f32)
+    mut v : Vec<Box<Object>>,
+    time : (f32, f32)
 ) -> Box<Object> {
     let axis = rng_fn();
 
@@ -208,11 +208,13 @@ fn into_bvh_det(
 }
 
 pub fn into_bvh(
-    rng : &mut Rng, v : Vec<Box<Object>>, time : (f32, f32)
+    rng : &mut RngCore,
+    v : Vec<Box<Object>>,
+    time : (f32, f32)
 ) -> Box<Object> {
-    let range = Range::new(0, 3);
+    let range = Uniform::from(0..3);
     into_bvh_det(
-        &mut || range.ind_sample(rng),
+        &mut || range.sample(rng),
         v, time)
 }
 
@@ -224,7 +226,7 @@ pub struct ConstantMedium {
 
 impl Object for ConstantMedium {
     fn hit(
-        &self, rng : &mut Rng, r : &Ray, dist : (f32, f32)
+        &self, rng : &mut RngCore, r : &Ray, dist : (f32, f32)
     ) -> Option<HitRecord> {
         let mhit1 = self.boundary.hit(rng, r, (f32::MIN, f32::MAX));
         if let Some(mut hit1) = mhit1 {
@@ -262,7 +264,7 @@ impl Object for ConstantMedium {
 pub struct FlipNormals<H : Object>(H);
 
 impl<H : Object> Object for FlipNormals<H> {
-    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+    fn hit(&self, rng : &mut RngCore, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
         let FlipNormals(ref inner) = *self;
         inner.hit(rng, r, dist).map(|mut hit| {
             hit.normal = -1.0 * hit.normal;
@@ -300,7 +302,7 @@ pub fn translate(offset : Vec3, inner : Box<Object>) -> Box<Translate> {
 }
 
 impl Object for Translate {
-    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+    fn hit(&self, rng : &mut RngCore, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
         let mut r = (*r).clone();
         r.origin -= self.offset;
         self.inner.hit(rng, &r, dist).map(|mut hit| {
@@ -372,7 +374,7 @@ pub fn rotate(axis : Vec3, angle : f32, inner : Box<Object>) -> Box<Rotate> {
 }
 
 impl Object for Rotate {
-    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+    fn hit(&self, rng : &mut RngCore, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
         if false {
             if rng.gen::<f32>() > 0.8 {
                 return self.debug_object.hit(rng, r, dist);
@@ -417,7 +419,7 @@ macro_rules! aarect {
         }
 
         impl Object for $XYRect {
-            fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+            fn hit(&self, rng : &mut RngCore, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
                 let t = (self.$z - r.origin[$Z]) / r.direction[$Z];
                 if !(dist.0 < t && t < dist.1) {
                     return None;
@@ -464,7 +466,7 @@ aarect!(XZRect, [x, X], [z, Z], [y, Y]);
 pub struct Sky;
 
 impl Object for Sky {
-    fn hit(&self, rng : &mut Rng, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
+    fn hit(&self, rng : &mut RngCore, r : &Ray, dist : (f32, f32)) -> Option<HitRecord> {
         if dist.1 < f32::INFINITY {
             None
         } else {
@@ -491,7 +493,7 @@ impl Object for Sky {
 //eh, why not?
 impl Material for Sky {
     fn scatter(
-        &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
+        &self, rng : &mut RngCore, r_in : &Ray, hit : &HitRecord
     ) -> Option<(Ray, Vec3)> {
         None
     }

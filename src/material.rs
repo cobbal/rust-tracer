@@ -5,7 +5,7 @@ use vec3::*;
 use texture::*;
 
 pub trait Material : Send + Sync {
-    fn scatter(&self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord)
+    fn scatter(&self, rng : &mut RngCore, r_in : &Ray, hit : &HitRecord)
                -> Option<(Ray, Vec3)>;
     fn emitted(&self, uv : (f32, f32), p : &Vec3) -> Vec3 {
         ZERO3
@@ -16,7 +16,7 @@ pub struct Lambertian<T : Texture>(pub T);
 
 impl<T : Texture> Material for Lambertian<T> {
     fn scatter(
-        &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
+        &self, rng : &mut RngCore, r_in : &Ray, hit : &HitRecord
     ) -> Option<(Ray, Vec3)> {
         let Lambertian(ref albedo) = *self;
         let target = hit.p + hit.normal + rand_in_ball(rng);
@@ -33,7 +33,7 @@ pub struct Metal {
 }
 
 impl Material for Metal {
-    fn scatter(&self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord)
+    fn scatter(&self, rng : &mut RngCore, r_in : &Ray, hit : &HitRecord)
                -> Option<(Ray, Vec3)> {
         let dir = r_in.direction.unit();
         let scattered = reflect(dir, hit.normal) + self.fuzz * rand_in_ball(rng);
@@ -49,7 +49,7 @@ pub struct Dielectric(pub f32);
 
 impl Material for Dielectric {
     fn scatter(
-        &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
+        &self, rng : &mut RngCore, r_in : &Ray, hit : &HitRecord
     ) -> Option<(Ray, Vec3)> {
         let &Dielectric(ref_idx) = self;
 
@@ -89,7 +89,7 @@ pub struct DiffuseLight<T : Texture>(pub T);
 
 impl<T : Texture> Material for DiffuseLight<T> {
     fn scatter(
-        &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
+        &self, rng : &mut RngCore, r_in : &Ray, hit : &HitRecord
     ) -> Option<(Ray, Vec3)> {
         None
     }
@@ -128,7 +128,7 @@ pub struct MixtureMaterial<M1 : Material, M2 : Material> {
 }
 impl<M1 : Material, M2 : Material> Material for MixtureMaterial<M1, M2> {
     fn scatter(
-        &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
+        &self, rng : &mut RngCore, r_in : &Ray, hit : &HitRecord
     ) -> Option<(Ray, Vec3)> {
         let m : &Material = if rng.gen::<f32>() < self.p {
             &self.m1
@@ -142,7 +142,7 @@ impl<M1 : Material, M2 : Material> Material for MixtureMaterial<M1, M2> {
 pub struct Isotropic<T : Texture>(pub T);
 impl<T : Texture> Material for Isotropic<T> {
     fn scatter(
-        &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
+        &self, rng : &mut RngCore, r_in : &Ray, hit : &HitRecord
     ) -> Option<(Ray, Vec3)> {
         let Isotropic(ref albedo) = *self;
         let mut r = (*r_in).clone();
@@ -155,7 +155,7 @@ impl<T : Texture> Material for Isotropic<T> {
 pub struct Tinted<T : Texture>(pub T);
 impl<T : Texture> Material for Tinted<T> {
     fn scatter(
-        &self, rng : &mut Rng, r_in : &Ray, hit : &HitRecord
+        &self, rng : &mut RngCore, r_in : &Ray, hit : &HitRecord
     ) -> Option<(Ray, Vec3)> {
         let Tinted(ref tint) = *self;
         let mut r = (*r_in).clone();
